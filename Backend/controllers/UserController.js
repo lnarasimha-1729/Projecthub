@@ -3,6 +3,7 @@ import validator from "validator";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
+import {v2 as cloudinary} from "cloudinary"
 dotenv.config();
 
 // Create JWT token
@@ -89,5 +90,67 @@ const loginUser = async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
+export const addImage = async (req, res) => {
+  try {
+    const { id } = req.body;
+
+    if (!id) {
+      return res.status(400).json({ success: false, message: "User ID required" });
+    }
+
+    const user = await userModel.findById(id);
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+
+    // handle single or multiple images
+    const files = req.files?.image1 || req.files || (req.file ? [req.file] : []);
+
+    if (!files.length) {
+      return res.status(400).json({ success: false, message: "No image provided" });
+    }
+
+    // Upload all images to Cloudinary
+    const imagesUrl = await Promise.all(
+      files.map(async (item) => {
+        const result = await cloudinary.uploader.upload(item.path, {
+          resource_type: "image",
+        });
+        return result.secure_url;
+      })
+    );
+
+    // Push new images into user's existing image array
+    user.image.push(...imagesUrl);
+
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Image(s) uploaded successfully",
+      images: user.image,
+    });
+  } catch (error) {
+    console.error("Error in addImage:", error);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+// backend/controllers/profileController.js
+export const getProfile = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const user = await userModel.findById(id);
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+    res.status(200).json({ success: true, user });
+  } catch (error) {
+    console.error("Error in getProfile:", error);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
 
 export { registerUser, loginUser };

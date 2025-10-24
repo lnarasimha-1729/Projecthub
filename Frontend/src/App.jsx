@@ -14,6 +14,7 @@ import Login from "./Login/Login";
 import UserContextProvider from "./Context/UserContext";
 import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
+import Profile from "./Component/Profile";
 
 // ✅ Layout wrapper
 const Layout = ({ children }) => {
@@ -44,6 +45,8 @@ const App = () => {
 
   const isLoginPage = location.pathname === "/login";
 
+  const isProfilePage = location.pathname === "/profile"
+
   return (
     <UserContextProvider>
       {isLoginPage ? (
@@ -54,9 +57,10 @@ const App = () => {
       ) : (
         // Wrap all other pages with layout
         <Layout>
-          <ToastContainer position="top-right" autoClose={3000} />
+          <ToastContainer position="top-center" autoClose={3000} />
           <Routes>
             <Route path="/" element={<Dashboard />} />
+            <Route path="/profile" element={<Profile/>}/>
             <Route path="/projects" element={<Projects />} />
             <Route path="/workers" element={<Workers />} />
             <Route path="/clock_entries" element={<CLockEntries />} />

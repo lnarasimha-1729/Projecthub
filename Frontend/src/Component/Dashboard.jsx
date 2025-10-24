@@ -19,6 +19,9 @@ export default function Dashboard() {
     }
   }, [token]);
 
+  console.log(userName);
+  
+
   /** USER ROLE */
 const userRole = useMemo(() => {
   try {
@@ -70,6 +73,9 @@ const userRole = useMemo(() => {
     });
     return busyWorkers.size;
   }, [projects]);
+
+  console.log(userRole);
+  
 
   /** ACTIVE PROJECTS */
   const activeProjects = projects.filter((p) => p.projectStatus === "active");

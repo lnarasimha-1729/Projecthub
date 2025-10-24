@@ -3,20 +3,22 @@ import { UsersContext } from "../Context/UserContext";
 import { motion } from "framer-motion";
 import { toast, ToastContainer } from "react-toastify";
 import { jwtDecode } from "jwt-decode";
+import axios from "axios";
 import "react-toastify/dist/ReactToastify.css";
 
 export default function Workers() {
   const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
-  const { addWorker, workers, projects } = useContext(UsersContext);
-  const workersList = workers.filter((item) => item.workerType === "Worker");
+  const { addWorker, workers, projects, backendUrl, token } = useContext(UsersContext);
+
+  // NOTE: If backendUrl & token are not provided via context, adjust accordingly.
   const [role, setRole] = useState("user");
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
-    if (token) {
+    const t = localStorage.getItem("token");
+    if (t) {
       try {
-        const decoded = jwtDecode(token);
+        const decoded = jwtDecode(t);
         setRole(decoded.role);
       } catch (error) {
         console.error("Invalid token", error);
@@ -24,15 +26,23 @@ export default function Workers() {
     }
   }, []);
 
+  // Only show actual workers with workerType === "Worker"
+  const workersList = workers?.filter((item) => item.workerType === "Worker") || [];
+
+  // Count workers currently on active projects (by workerId)
   const onProject = useMemo(() => {
-    const busyWorkers = new Set();
+    const busy = new Set();
     projects.forEach((project) => {
       if (project.projectStatus === "active") {
-        project.assignedWorkers?.forEach((worker) => busyWorkers.add(worker.Name));
+        project.assignedWorkers?.forEach((w) => {
+          // adapt to shape { workerId, Name } or just id/name
+          const id = w?.workerId || w?._id || w;
+          if (id) busy.add(id.toString());
+        });
       }
     });
-    return busyWorkers.size;
-  }, [projects, workers]);
+    return busy.size;
+  }, [projects]);
 
   const available = Math.max(workersList.length - onProject, 0);
 
@@ -73,22 +83,85 @@ export default function Workers() {
     }
   };
 
-  const topPerformer = useMemo(() => {
-    if (!workersList.length || !projects.length) return null;
-    const performanceMap = {};
-    workersList.forEach((worker) => (performanceMap[worker.Name] = 0));
-    projects.forEach((project) => {
-      if (project.projectStatus === "completed") {
-        project.assignedWorkers?.forEach((aw) => {
-          if (performanceMap[aw.Name] !== undefined) performanceMap[aw.Name] += 1;
-        });
-      }
+  /* -------------------------
+     Ranking logic (frontend)
+     ------------------------- */
+  // Create an array copy sorted by completedProjects descending
+  const sortedByCompleted = useMemo(() => {
+    const arr = (workersList || []).slice();
+    arr.sort((a, b) => {
+      const pa = Number(a.completedProjects || 0);
+      const pb = Number(b.completedProjects || 0);
+      return pb - pa;
     });
-    const topWorkerName = Object.keys(performanceMap).reduce((a, b) =>
-      performanceMap[a] > performanceMap[b] ? a : b
-    );
-    return workersList.find((w) => w.Name === topWorkerName) || null;
-  }, [workersList, projects]);
+    return arr;
+  }, [workersList]);
+
+  // Map workerId -> rank (1 = highest completedProjects). Workers with same count get same rank.
+  const ranksMap = useMemo(() => {
+    const map = {};
+    let rank = 1;
+    let prevScore = null;
+    let sameRankCount = 0;
+
+    for (let i = 0; i < sortedByCompleted.length; i++) {
+      const w = sortedByCompleted[i];
+      const score = Number(w.completedProjects || 0);
+
+      if (prevScore === null) {
+        prevScore = score;
+        sameRankCount = 1;
+        map[w._id] = rank;
+      } else {
+        if (score === prevScore) {
+          // tie: same rank as previous
+          map[w._id] = rank;
+          sameRankCount++;
+        } else {
+          // advance rank by number of tied items
+          rank = rank + sameRankCount;
+          sameRankCount = 1;
+          prevScore = score;
+          map[w._id] = rank;
+        }
+      }
+    }
+    return map;
+  }, [sortedByCompleted]);
+
+  // Top performer: first item in sortedByCompleted (if any)
+  const topPerformer = useMemo(() => {
+    if (!sortedByCompleted.length) return null;
+    return sortedByCompleted[0];
+  }, [sortedByCompleted]);
+
+  /* Optionally sync ranks to backend so userModel.rank is updated */
+  useEffect(() => {
+    // Only sync if admin and backendUrl & token are available
+    if (role !== "admin" || !backendUrl || !token) return;
+
+    // Prepare payload: [{ id, rank }, ...]
+    const payload = Object.entries(ranksMap).map(([id, rank]) => ({ id, rank }));
+
+    if (!payload.length) return;
+
+    // Do not block UI — fire-and-forget; but handle errors with toast
+    const sync = async () => {
+      try {
+        await axios.post(
+          `${backendUrl}/api/user/update-ranks`,
+          { ranks: payload },
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        // optionally notify success, but avoid spamming toasts on every workers change
+        // toast.success("Ranks synced");
+      } catch (err) {
+        console.error("Failed syncing ranks:", err);
+        // Only show toast on explicit failures rarely
+      }
+    };
+    sync();
+  }, [ranksMap, role, backendUrl, token]);
 
   return (
     <div className="min-h-screen mt-26 bg-gradient-to-br from-indigo-50 via-white to-purple-100 p-8">
@@ -122,15 +195,12 @@ export default function Workers() {
             transition={{ type: "spring", stiffness: 180, damping: 18 }}
             className="relative rounded-xl py-3 border border-gray-400 flex items-center justify-center gap-4 bg-white shadow-md transition-transform duration-100 hover:bg-blue-100"
           >
-            <div
-              className="w-14 h-14 rounded-full bg-blue-300 flex items-center justify-center text-2xl shadow-lg"
-
-            >
-              <img className="w-12 p-1.5" src={item.icon} />
+            <div className="w-14 h-14 rounded-full bg-blue-300 flex items-center justify-center text-2xl shadow-lg">
+              <img className="w-12 p-1.5" src={item.icon} alt={item.title} />
             </div>
             <div>
               <div className="flex flex-col gap-0 font-semibold">
-                <span className="text-gray-700 mt-1 text-">{item.title}</span>
+                <span className="text-gray-700 mt-1">{item.title}</span>
                 <p className="text-2xl">{item.value}</p>
               </div>
             </div>
@@ -153,17 +223,9 @@ export default function Workers() {
               <div className="font-bold text-xl text-gray-900">{topPerformer.Name}</div>
               <div className="text-gray-700">{topPerformer.Role}</div>
               <div className="text-yellow-500 font-semibold mt-1">
-                {
-                  projects.filter((proj) =>
-                    proj.assignedWorkers?.some(
-                      (aw) =>
-                        aw.Name === topPerformer.Name &&
-                        proj.projectStatus === "completed"
-                    )
-                  ).length
-                }{" "}
-                Completed Projects
+                {Number(topPerformer.completedProjects || 0)} Completed Projects
               </div>
+              <div className="mt-1 text-sm text-gray-500">Rank: #{ranksMap[topPerformer._id]}</div>
             </div>
           </motion.div>
         </div>
@@ -176,6 +238,7 @@ export default function Workers() {
         projects={projects}
         type="Supervisor"
         topPerformer={topPerformer}
+        ranksMap={ranksMap}
       />
       <Section
         title="Team Members"
@@ -183,6 +246,7 @@ export default function Workers() {
         projects={projects}
         type="Worker"
         topPerformer={topPerformer}
+        ranksMap={ranksMap}
       />
 
       {/* Add Worker Modal */}
@@ -249,76 +313,82 @@ export default function Workers() {
 }
 
 /* Section Component */
-/* Section Component */
-function Section({ title, workers, projects, type, topPerformer }) {
+function Section({ title, workers, projects, type, topPerformer, ranksMap }) {
+  const filtered = (workers || []).filter((w) => w.workerType === type);
+
   return (
     <div className="mt-10">
       <p className="text-3xl font-semibold mb-4 text-gray-700">{title}</p>
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
-        {workers
-          .filter((w) => w.workerType === type)
-          .map((worker, i) => {
-            // Determine assigned projects based on workerId
-            const assignedProjects = projects.filter((proj) =>
-              type === "Supervisor"
-                ? Array.isArray(proj.supervisors) &&
-                  proj.supervisors.some(
-                    (sup) => sup?.trim().toLowerCase() === worker.Name.trim().toLowerCase()
-                  )
-                : proj.assignedWorkers?.some(
-                    (aw) => aw.workerId.toString() === worker._id.toString()
-                  )
-            );
+        {filtered.map((worker, i) => {
+          const assignedProjects = projects.filter((proj) =>
+            type === "Supervisor"
+              ? Array.isArray(proj.supervisors) &&
+                proj.supervisors.some(
+                  (sup) => sup?.trim().toLowerCase() === worker.Name.trim().toLowerCase()
+                )
+              : proj.assignedWorkers?.some(
+                  (aw) => (aw.workerId && aw.workerId.toString()) === worker._id.toString()
+                )
+          );
 
-            const isBusy = assignedProjects.length > 0;
+          const isBusy = assignedProjects.length > 0;
 
-            return (
-              <motion.div
-                key={i}
-                className="bg-white rounded-3xl p-4 shadow-lg transition-transform transform-gpu relative"
-              >
-                {topPerformer?.Name === worker.Name && (
-                  <div className="absolute top-3 right-3 px-3 py-1 rounded-full bg-yellow-400 text-black font-bold text-xs shadow-lg animate-pulse">
-                    ⭐ Top
-                  </div>
-                )}
+          return (
+            <motion.div
+              key={worker._id || i}
+              className="bg-white rounded-3xl p-4 shadow-lg transition-transform transform-gpu relative"
+            >
+              {topPerformer?.Name === worker.Name && (
+                <div className="absolute top-3 right-3 px-3 py-1 rounded-full bg-yellow-400 text-black font-bold text-xs shadow-lg animate-pulse">
+                  ⭐ Top
+                </div>
+              )}
 
-                <div className="flex items-center gap-4 mb-3">
-                  <div
-                    className={`w-14 h-14 rounded-full flex items-center justify-center text-white font-bold text-xl shadow-lg ${isBusy ? "ring-2 ring-red-500" : "ring-2 ring-green-400"
-                      }`}
-                    style={{ background: "linear-gradient(135deg,#22C55E,#8b5cf6)" }}
-                  >
-                    {worker.Name?.[0]?.toUpperCase() || "?"}
-                  </div>
-                  <div>
-                    <div className="font-bold text-gray-900">{worker.Name}</div>
-                    <div className="text-gray-700">{worker.Role}</div>
-                  </div>
+              <div className="flex items-center gap-4 mb-3">
+                <div
+                  className={`w-14 h-14 rounded-full flex items-center justify-center text-white font-bold text-xl shadow-lg ${isBusy ? "ring-2 ring-red-500" : "ring-2 ring-green-400"}`}
+                  style={{ background: "linear-gradient(135deg,#22C55E,#8b5cf6)" }}
+                >
+                  {worker.Name?.[0]?.toUpperCase() || "?"}
                 </div>
 
-                <p className={`font-semibold ${isBusy ? "text-red-500" : "text-green-400"}`}>
-                  {isBusy ? "Busy" : "Available"}
-                </p>
+                <div className="flex-1">
+                  <div className="font-bold text-gray-900">{worker.Name}</div>
+                  <div className="text-gray-700">{worker.Role}</div>
+                </div>
 
-                {isBusy && assignedProjects.length > 0 && (
-                  <div className="mt-3">
-                    <span>On Projects:</span>
-                    <div className="grid grid-cols-3 gap-2 gap-y-2 mt-2">
-                      {assignedProjects.map((proj, idx) => (
-                        <span
-                          key={idx}
-                          className="bg-indigo-50 p-2 rounded-xl text-gray-800 text-sm font-medium shadow-inner overflow-x-hidden"
-                        >
-                          {proj.projectName}
-                        </span>
-                      ))}
-                    </div>
+                {/* Rank badge */}
+                <div className="flex flex-col items-end">
+                  <div className="text-xs text-gray-400">Rank</div>
+                  <div className="mt-1 px-3 py-1 rounded-full bg-indigo-50 text-indigo-700 font-semibold">
+                    #{ranksMap[worker._id] || "—"}
                   </div>
-                )}
-              </motion.div>
-            );
-          })}
+                </div>
+              </div>
+
+              <p className={`font-semibold ${isBusy ? "text-red-500" : "text-green-400"}`}>
+                {isBusy ? "Busy" : "Available"}
+              </p>
+
+              {isBusy && assignedProjects.length > 0 && (
+                <div className="mt-3">
+                  <span>On Projects:</span>
+                  <div className="grid grid-cols-3 gap-2 gap-y-2 mt-2">
+                    {assignedProjects.map((proj, idx) => (
+                      <span
+                        key={idx}
+                        className="bg-indigo-50 p-2 rounded-xl text-gray-800 text-sm font-medium shadow-inner overflow-x-hidden"
+                      >
+                        {proj.projectName}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </motion.div>
+          );
+        })}
       </div>
     </div>
   );

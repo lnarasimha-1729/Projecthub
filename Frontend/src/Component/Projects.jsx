@@ -343,7 +343,7 @@ const Projects = () => {
                   <div className="mb-4">
                     <p className="font-semibold text-gray-700 mb-2">Supervisor:</p>
                     {item.supervisors ? (
-                      <motion.span whileHover={{ scale: 1.05 }} className="bg-gradient-to-r from-purple-200 to-purple-300 text-purple-800 text-sm font-medium px-3 py-1 rounded-full shadow">
+                      <motion.span whileHover={{ scale: 1.05 }} className="bg-gradient-to-r from-purple-200 to-purple-300 text-purple-800 text-sm font-medium px-3 py-1 rounded-full">
                         {Array.isArray(item.supervisors) ? item.supervisors.join(", ") : item.supervisors}
                       </motion.span>
                     ) : <p className="text-sm text-gray-400">No supervisor assigned</p>}
@@ -355,7 +355,7 @@ const Projects = () => {
                       {item.assignedWorkers?.length > 0 ? (
                         item.assignedWorkers.map((w) => (
                           <motion.span key={w.workerId} whileHover={{ scale: 1.1 }}
-                            className="bg-gradient-to-r from-blue-200 to-blue-300 text-blue-800 text-sm font-medium px-3 py-1 rounded-full shadow">
+                            className="bg-gradient-to-r from-blue-200 to-blue-300 text-blue-800 text-sm font-medium px-3 py-1 rounded-full">
                             {w.name || "Unnamed"}
                           </motion.span>
                         ))
@@ -371,7 +371,7 @@ const Projects = () => {
                       {(Array.isArray(item.images) && item.images.length > 0) && (
                         <motion.button
                           onClick={() => openImageModal(item.images)}
-                          className="flex items-center px-3 py-1 bg-blue-200 text-blue-800 rounded shadow"
+                          className="flex items-center px-3 py-1 bg-blue-200 text-blue-800 rounded"
                         >
                           <img className="w-8" src="https://img.icons8.com/color/50/google-images.png" alt="google-images" />
                           <span>({item.images.length})</span>
@@ -380,7 +380,7 @@ const Projects = () => {
                       {(Array.isArray(item.pdfs) && item.pdfs.length > 0) && (
                         <motion.button
                           onClick={() => openPdfModal(item.pdfs)}
-                          className="flex items-center px-3 py-1 bg-blue-200 text-blue-800 rounded shadow"
+                          className="flex items-center px-3 py-1 bg-blue-200 text-blue-800 rounded"
                         >
                           <img className="w-8" src="https://img.icons8.com/ultraviolet/40/pdf-2.png" alt="pdf-2" />
                           <span>({item.pdfs.length})</span>

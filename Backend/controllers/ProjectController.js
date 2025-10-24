@@ -136,33 +136,27 @@ export const updateStatus = async (req, res) => {
 
 export const updateProgress = async (req, res) => {
   try {
-    console.log("🟢 updateProgress called");
-    console.log("REQ.BODY:", req.body);
-    console.log("REQ.FILES:", req.files);
-
     const { id, progress } = req.body;
     if (!id) return res.status(400).json({ success: false, message: "Project ID required" });
 
     const project = await ProjectModel.findById(id);
     if (!project) return res.status(404).json({ success: false, message: "Project not found" });
 
+    // Keep previous status to avoid double-counting
+    const prevStatus = project.projectStatus;
+
     // Ensure arrays exist
     project.images = Array.isArray(project.images) ? project.images : [];
     project.pdfs = Array.isArray(project.pdfs) ? project.pdfs : [];
 
-    // Normalize uploaded files from multer
+    // Normalize uploaded files from multer (unchanged from your code)
     let allFiles = [];
     if (Array.isArray(req.files)) {
       allFiles = req.files;
     } else if (req.files && typeof req.files === "object") {
-      // Flatten if multiple fields like req.files.images / req.files.pdf
       allFiles = Object.values(req.files).flat();
     }
-
-    console.log("✅ All uploaded files:", allFiles.map(f => ({ name: f.filename, mime: f.mimetype })));
-
-    // Separate images & pdfs
-    allFiles.forEach(f => {
+    allFiles.forEach((f) => {
       if (!f || !f.mimetype) return;
       if (f.mimetype.startsWith("image/")) project.images.push(f.filename);
       else if (f.mimetype === "application/pdf") project.pdfs.push(f.filename);
@@ -171,13 +165,44 @@ export const updateProgress = async (req, res) => {
     // Update progress
     if (progress !== undefined) {
       const numeric = Number(progress);
-
       if (!Number.isNaN(numeric)) project.progress = Math.min(100, Math.max(0, numeric));
 
-      if(numeric === 100){
+      // When it reaches 100, mark completed and increment workers' counters
+      if (numeric === 100) {
         project.projectStatus = "completed";
-        project.assignedWorkers = []
-        project.supervisors = ""
+
+        // Only perform increment if it wasn't already completed
+        if (prevStatus !== "completed" && Array.isArray(project.assignedWorkers) && project.assignedWorkers.length) {
+          // Normalize assignedWorkers to array of IDs
+          const workerIds = project.assignedWorkers.map((w) => {
+            // if stored as object like { workerId: "..."} or { id: "..." }
+            if (typeof w === "object" && w !== null) {
+              return w.workerId || w.id || w._id || null;
+            }
+            return w; // string or ObjectId
+          }).filter(Boolean);
+
+          // convert to ObjectId where appropriate (robust)
+          const normalizedIds = workerIds.map((wid) => {
+            try {
+              return mongoose.Types.ObjectId(wid);
+            } catch {
+              return wid; // leave as-is if can't convert
+            }
+          });
+
+          // Run updateMany and capture result
+          const updateResult = await WorkerModel.updateMany(
+            { _id: { $in: normalizedIds } },
+            { $inc: { completedProjects: 1 } }
+          );
+
+          console.log("updateMany result:", updateResult); // contains modifiedCount (mongoose v6+)
+        }
+
+        // clear assigned workers and supervisors (as per original logic)
+        project.assignedWorkers = [];
+        project.supervisors = "";
       }
     }
 
@@ -191,6 +216,7 @@ export const updateProgress = async (req, res) => {
     return res.status(500).json({ success: false, message: error.message });
   }
 };
+
 
 
 /**

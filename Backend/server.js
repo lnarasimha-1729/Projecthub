@@ -9,8 +9,10 @@ import queryRouter from "./routes/QueryRoute.js";
 import clockRouter from "./routes/ClockRoute.js";
 import path from "path"
 import dotenv from "dotenv";
+import connectCloudinary from "./Config/cloudinary.js";
 
 dotenv.config();
+connectCloudinary()
 
 const app = express();
 const port = 4000;

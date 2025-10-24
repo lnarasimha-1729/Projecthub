@@ -1,8 +1,11 @@
-import React from "react";
+import React, { useContext } from "react";
 import { NavLink } from "react-router-dom";
 import {jwtDecode} from "jwt-decode"; // ✅ fixed import
+import { UsersContext } from "../Context/UserContext";
 
 const SideBar = () => {
+
+  const {setToken,navigate} = useContext(UsersContext)
   // decode role from token
   const token = localStorage.getItem("token");
   let role = "worker";
@@ -15,6 +18,12 @@ const SideBar = () => {
       console.error("Invalid token");
     }
   }
+
+  const logout = () => {
+    localStorage.removeItem("token");
+    setToken("");
+    navigate("/login");
+  };
 
   // all menu items
   const allItems = [
@@ -63,7 +72,20 @@ const SideBar = () => {
             </NavLink>
           ))}
         </div>
+        
       </div>
+      <div>
+          {token && (
+            <div className="fixed bottom-0 left-1 w-fit h-8 bg-red-400 border border-gray-300 rounded shadow-md">
+              <p
+                onClick={logout}
+                className="py-0.5 px-2 text-white cursor-pointer"
+              >
+                Logout
+              </p>
+            </div>
+          )}
+        </div>
     </div>
   );
 };
