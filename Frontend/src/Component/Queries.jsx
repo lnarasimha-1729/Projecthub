@@ -1,6 +1,7 @@
 import React, { useState, useContext } from "react";
 import { UsersContext } from "../Context/UserContext";
-import { toast } from "react-toastify"; // ✅ import toast
+import { toast } from "react-toastify";
+import { jwtDecode } from "jwt-decode";
 import { motion } from "framer-motion";
 import { User, Folder, Flag, Calendar } from "lucide-react";
 import { useEffect } from "react";
@@ -22,6 +23,7 @@ export default function Queries() {
   const [showModal, setShowModal] = useState(false);
   const [allQueries, setAllQueries] = useState([])
   const [searchTerm, setSearchTerm] = useState("");
+  const [role, setRole] = useState("")
 
   const [statusCounts, setStatusCounts] = useState({
     All: 0,
@@ -40,12 +42,9 @@ export default function Queries() {
       };
       setStatusCounts(counts);
     } else {
-      setStatusCounts({ All: 0, Open: 0, "In progress": 0, Resolved: 0 });
+      setStatusCounts({ All: 0, Open: 0, Resolved: 0 });
     }
   }, [queries, activeStatus]);
-
-
-console.log(queries);
 
 
 
@@ -59,7 +58,7 @@ console.log(queries);
   });
 
   const priorities = ["Low Priority", "Medium Priority", "High Priority"];
-  const statuses = ["All", "Open", "In progress", "Resolved"];
+  const statuses = ["All", "Open", "Resolved"];
 
   const handleFieldChange = (e) => {
     const { name, value } = e.target;
@@ -109,17 +108,23 @@ console.log(queries);
     }
   };
 
-  const token = localStorage.getItem("token");
-  let role = "user";
+const [workerName, setWorkerName] = useState("");
 
+useEffect(() => {
+  const token = localStorage.getItem("token");
   if (token) {
     try {
       const decoded = jwtDecode(token);
-      role = decoded.role;
+      setRole(decoded.role || "");
+      // Assuming token includes name or email field
+      setWorkerName(decoded.name || decoded.email || ""); 
     } catch (error) {
       console.error("Invalid token");
     }
   }
+}, []);
+
+  
 
   const handleDelete = async (id) => {
     try {
@@ -132,20 +137,19 @@ console.log(queries);
     }
   };
 
-  console.log(role);
-
 
 
   const openModal = () => {
-    setForm({
-      queryTitle: "",
-      queryDescription: "",
-      queryProject: "",
-      queryWorker: "",
-      queryPriority: "",
-    });
-    setShowModal(true);
-  };
+  setForm({
+    queryTitle: "",
+    queryDescription: "",
+    queryProject: "",
+    queryWorker: workerName, // ✅ auto from token
+    queryPriority: "",
+  });
+  setShowModal(true);
+};
+
   useEffect(() => {
     if (activeStatus === "All") {
       setAllQueries(queries)
@@ -158,301 +162,267 @@ console.log(queries);
     }
   }, [activeStatus])
 
-  console.log(allQueries);
-
-
-
-
-
   return (
-    <div className="bg-gray-100 min-h-screen mt-26 p-6 w-full">
-      <div className="mb-8">
-        <p className="text-3xl font-bold bg-gradient-to-r from-blue-600 via-purple-600 to-pink-500 bg-clip-text text-transparent mb-1">
-          Team Queries & Support
-        </p>
-        <p className="mb-6 text-gray-600">
-          Collaborate, ask questions, and share knowledge with your team
-        </p>
-      </div>
+  <div className="min-h-screen mt-26 bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 px-6 py-10 w-full">
+    {/* Header */}
+    <div className="mb-4 text-center">
+      <p className="text-3xl font-semibold bg-gradient-to-r from-blue-600 via-purple-600 to-pink-500 bg-clip-text text-transparent">
+        Team Queries & Support
+      </p>
+      <p className="text-gray-600 mt-2 text-sm md:text-base">
+        Collaborate, ask questions, and share knowledge with your team.
+      </p>
+    </div>
 
-      {/* Search and tabs */}
-      <div className="flex items-center gap-3 mb-8 w-full">
-        <input
-          type="text"
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="border border-gray-300 rounded-lg px-4 h-14 w-[320px] shadow bg-white"
-          placeholder="Search by query, project, or worker..."
-        />
+    {/* Search & Filter Bar */}
+    <div className="flex flex-wrap items-center gap-3 mb-4 bg-white/60 backdrop-blur-xl p-4 rounded-2xl shadow-md border border-gray-200">
+      <input
+        type="text"
+        value={searchTerm}
+        onChange={(e) => setSearchTerm(e.target.value)}
+        className="border border-gray-300 rounded-xl px-4 py-3 w-full md:w-1/2 bg-white/80 focus:outline-none focus:ring-2 focus:ring-blue-400 shadow-sm"
+        placeholder="🔍 Search by query, project, or worker..."
+      />
 
+      <div className="flex gap-2 overflow-x-auto">
         {statuses.map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveStatus(tab)}
-            className={`flex px-3 py-1 h-14 rounded shadow-lg transition
-      ${activeStatus === tab
-                ? "bg-blue-600 text-white rounded-2xl"
-                : "bg-white text-gray-700 hover:bg-blue-50 rounded-lg"
-              }`}
+            className={`flex items-center gap-2 px-5 py-2 rounded-full font-semibold text-sm transition-all duration-300 ${
+              activeStatus === tab
+                ? "bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-md"
+                : "bg-white/70 text-gray-700 hover:bg-blue-50"
+            }`}
           >
-            {tab}{" "}
+            {tab}
             <span
-              className={`ml-0 -mr-6 text-sm font-semibold -mt-4 p-1 w-7 h-7 rounded-full ${activeStatus === tab ? "text-blue-400 bg-white" : "text-white bg-blue-600"
-                }`}
+              className={`text-xs font-bold w-6 h-6 flex items-center justify-center rounded-full ${
+                activeStatus === tab ? "bg-white text-blue-600" : "bg-blue-100 text-blue-700"
+              }`}
             >
               {statusCounts[tab] || 0}
             </span>
           </button>
         ))}
-
-
-
-        {/* Modal trigger */}
-        <button
-          onClick={openModal}
-          type="button"
-          className="ml-auto flex items-center gap-2 bg-gradient-to-r from-blue-500 to-purple-500 text-white px-6 py-2 shadow font-semibold hover:opacity-90 transition rounded"
-        >
-          <span className="text-xl">+</span>
-          Post Query
-        </button>
       </div>
 
+      <button
+        onClick={openModal}
+        type="button"
+        className="ml-auto bg-gradient-to-r from-blue-500 to-purple-500 text-white px-6 py-3 rounded-xl font-semibold shadow hover:opacity-90 transition-all duration-300"
+      >
+        ➕ Post Query
+      </button>
+    </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
-        {allQueries
-          .filter((query) => {
-            if (!searchTerm.trim()) return true;
-            const term = searchTerm.toLowerCase();
-            return (
-              query.queryTitle?.toLowerCase().includes(term) ||
-              query.queryDescription?.toLowerCase().includes(term) ||
-              query.queryProject?.toLowerCase().includes(term) ||
-              query.queryWorker?.toLowerCase().includes(term)
-            );
-          }).map((query, index) => (
-              <motion.div
-                key={index}
-                custom={index}
-                initial="hidden"
-                animate="visible"
-                variants={cardVariants}
-                whileHover={{ scale: 1.02 }}
-                className="relative bg-white rounded-2xl shadow-sm hover:shadow-2xl transition-all duration-300 border border-gray-200 overflow-hidden"
-              >
-                {/* Accent Bar */}
-                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500" />
+    {/* Query Cards */}
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-8">
+      {allQueries
+        .filter((query) => {
+          if (!searchTerm.trim()) return true;
+          const term = searchTerm.toLowerCase();
+          return (
+            query.queryTitle?.toLowerCase().includes(term) ||
+            query.queryDescription?.toLowerCase().includes(term) ||
+            query.queryProject?.toLowerCase().includes(term) ||
+            query.queryWorker?.toLowerCase().includes(term)
+          );
+        })
+        .map((query, index) => (
+          <motion.div
+            key={index}
+            custom={index}
+            initial="hidden"
+            animate="visible"
+            variants={cardVariants}
+            whileHover={{ scale: 1.03 }}
+            className="relative bg-white/80 backdrop-blur-md border border-gray-200 rounded-2xl shadow-md hover:shadow-2xl transition-all duration-500 overflow-hidden"
+          >
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500" />
 
-                {/* Content */}
-                <div className="p-6 flex flex-col gap-5">
-                  {/* Worker + Project */}
-                  <div className="flex items-center justify-between">
-                    <div className="flex flex-col">
-                      <div className="flex items-center gap-2 text-gray-800 font-semibold">
-                        <User className="w-4 h-4 text-indigo-500" />
-                        {query.queryWorker}
-                      </div>
-                      <div className="flex items-center gap-2 text-sm text-gray-500">
-                        <Folder className="w-4 h-4 text-gray-400" />
-                        {query.queryProject}
-                      </div>
-                    </div>
-                    <div className="flex flex-col items-end text-xs text-gray-400">
-                      <div className="flex items-center gap-1">
-                        <Calendar className="w-3 h-3" />
-                        {new Date(query.createdAt).toLocaleDateString("en-US", {
-                          day: "numeric",
-                          month: "short",
-                          year: "numeric",
-                        })}
-                      </div>
-                      <span>
-                        {new Date(query.createdAt).toLocaleTimeString("en-US", {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                          hour12: true,
-                        })}
-                      </span>
-                    </div>
+            <div className="p-6 flex flex-col gap-5">
+              {/* Worker + Project */}
+              <div className="flex justify-between items-start">
+                <div>
+                  <div className="flex items-center gap-2 font-semibold text-gray-800">
+                    <User className="w-4 h-4 text-indigo-500" />
+                    {query.queryWorker}
                   </div>
-
-                  {/* Title + Description */}
-                  <div className="text-center">
-                    <h3 className="text-lg font-semibold text-gray-900 mb-1">
-                      {query.queryTitle}
-                    </h3>
-                    <p className="text-sm text-gray-600 leading-relaxed">
-                      {query.queryDescription}
-                    </p>
-                  </div>
-
-                  {/* Status + Priority */}
-                  <div className="flex justify-between items-center">
-                    <span
-                      className={`px-3 py-1 text-xs font-medium rounded-full shadow-sm ${query.status === "Resolved"
-                        ? "bg-green-100 text-green-700"
-                        : query.status === "In progress"
-                          ? "bg-yellow-100 text-yellow-700"
-                          : "bg-red-100 text-red-700"
-                        }`}
-                    >
-                      {query.status}
-                    </span>
-
-                    <span
-                      className={`flex items-center gap-1 px-3 py-1 text-xs font-medium rounded-full shadow-sm ${query.queryPriority === "High Priority"
-                        ? "bg-red-100 text-red-700"
-                        : query.queryPriority === "Medium Priority"
-                          ? "bg-yellow-100 text-yellow-700"
-                          : "bg-blue-100 text-blue-700"
-                        }`}
-                    >
-                      <Flag className="w-3 h-3" />
-                      {query.queryPriority}
-                    </span>
-                    {role === "admin" ?
-                      (<button
-                        onClick={() => {
-                          queryStatus(query._id, query.status);
-                        }}
-                        className="text-sm font-semibold text-blue-600 hover:underline"
-                      >
-                        Solve
-                      </button>) : ("")}
-                    <button onClick={() => handleDelete(query._id)}>Delete</button>
-
-
+                  <div className="flex items-center gap-2 text-sm text-gray-500 mt-1">
+                    <Folder className="w-4 h-4 text-gray-400" />
+                    {query.queryProject}
                   </div>
                 </div>
-              </motion.div>
-            ))}
-      </div>
 
-      {/* Modal */}
-      {showModal && (
-        <>
-          <div className="modal fade show d-block" tabIndex="-1">
-            <div className="modal-dialog modal-dialog-centered">
-              <div className="modal-content border-0 shadow-lg rounded-3">
-                <div className="modal-header border-0 pb-0">
-                  <h5 className="modal-title fw-bold">Post a New Query</h5>
-                  <button
-                    type="button"
-                    className="btn-close"
-                    onClick={() => setShowModal(false)}
-                  ></button>
-                </div>
-                <div className="modal-body overflow-scroll">
-                  <form>
-                    {/* Title */}
-                    <div className="mb-3">
-                      <label className="form-label fw-semibold">Query Title</label>
-                      <input
-                        type="text"
-                        className="form-control"
-                        name="queryTitle"
-                        value={form.queryTitle}
-                        onChange={handleFieldChange}
-                        placeholder="Query title"
-                      />
-                    </div>
-                    {/* Description */}
-                    <div className="mb-3">
-                      <label className="form-label fw-semibold">
-                        Detailed Description
-                      </label>
-                      <textarea
-                        className="form-control"
-                        rows={3}
-                        name="queryDescription"
-                        value={form.queryDescription}
-                        onChange={handleFieldChange}
-                        placeholder="Describe your issue..."
-                      ></textarea>
-                    </div>
-                    {/* Project + Worker */}
-                    <div className="flex gap-4">
-                      <div className="mb-3 w-1/2">
-                        <label className="form-label fw-semibold">Project</label>
-                        <select
-                          className="form-select"
-                          name="queryProject"
-                          value={form.queryProject}
-                          onChange={handleFieldChange}
-                        >
-                          <option value="">Select a project</option>
-                          {projects.map((proj) => (
-                            <option key={proj._id} value={proj.projectName}>
-                              {proj.projectName}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="mb-3 w-1/2">
-                        <label className="form-label fw-semibold">Worker</label>
-                        <select
-                          className="form-select"
-                          name="queryWorker"
-                          value={form.queryWorker}
-                          onChange={handleFieldChange}
-                        >
-                          <option value="">Select a worker</option>
-                          {workers.map((worker) => (
-                            <option key={worker._id} value={worker.Name}>
-                              {worker.Name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-
-                    {/* Priority */}
-                    <div className="mb-3">
-                      <label className="form-label fw-semibold">Priority</label>
-                      <select
-                        className="form-select"
-                        name="queryPriority"
-                        value={form.queryPriority}
-                        onChange={handleFieldChange}
-                      >
-                        <option value="">Select priority</option>
-                        {priorities.map((priority, i) => (
-                          <option key={i} value={priority}>
-                            {priority}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </form>
-                </div>
-                <div className="modal-footer border-0">
-                  <button
-                    type="button"
-                    className="btn btn-light"
-                    onClick={() => setShowModal(false)}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-primary"
-                    onClick={handleCreateQuery} // ✅ fixed
-                    disabled={loading}
-                  >
-                    {loading ? "Posting..." : "Post Query"}
-                  </button>
+                <div className="text-xs text-gray-400 text-right">
+                  <div className="flex items-center gap-1 justify-end">
+                    <Calendar className="w-3 h-3" />
+                    {new Date(query.createdAt).toLocaleDateString("en-US", {
+                      day: "numeric",
+                      month: "short",
+                      year: "numeric",
+                    })}
+                  </div>
+                  <span>
+                    {new Date(query.createdAt).toLocaleTimeString("en-US", {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                      hour12: true,
+                    })}
+                  </span>
                 </div>
               </div>
+
+              {/* Title & Description */}
+              <div>
+                <h3 className="text-lg font-bold text-gray-900 mb-1">
+                  {query.queryTitle}
+                </h3>
+                <p className="text-sm text-gray-600 leading-relaxed">
+                  {query.queryDescription}
+                </p>
+              </div>
+
+              {/* Status, Priority & Actions */}
+              <div className="flex justify-between items-center mt-2">
+                <span
+                  className={`px-3 py-1 text-xs font-medium rounded-full ${
+                    query.status === "Resolved"
+                      ? "bg-green-100 text-green-700"
+                      : query.status === "In progress"
+                      ? "bg-yellow-100 text-yellow-700"
+                      : "bg-red-100 text-red-700"
+                  }`}
+                >
+                  {query.status}
+                </span>
+
+                <span
+                  className={`flex items-center gap-1 px-3 py-1 text-xs font-medium rounded-full ${
+                    query.queryPriority === "High Priority"
+                      ? "bg-red-100 text-red-700"
+                      : query.queryPriority === "Medium Priority"
+                      ? "bg-yellow-100 text-yellow-700"
+                      : "bg-blue-100 text-blue-700"
+                  }`}
+                >
+                  <Flag className="w-3 h-3" />
+                  {query.queryPriority}
+                </span>
+
+                {role !== "worker" && (
+                  <div className="flex gap-3 items-center">
+                    <button
+                      onClick={() => queryStatus(query._id, query.status)}
+                      className="text-blue-600 hover:scale-110 transition-transform"
+                    >
+                      <img
+                        className="w-5 h-5"
+                        src="https://img.icons8.com/external-bearicons-glyph-bearicons/64/external-mark-call-to-action-bearicons-glyph-bearicons.png"
+                        alt="mark"
+                      />
+                    </button>
+                    <button
+                      onClick={() => handleDelete(query._id)}
+                      className="text-red-500 hover:scale-110 transition-transform"
+                    >
+                      <img
+                        className="w-5 h-5"
+                        src="https://img.icons8.com/material-sharp/24/filled-trash.png"
+                        alt="delete"
+                      />
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </motion.div>
+        ))}
+    </div>
+
+    {/* Modal (unchanged) */}
+    {showModal && (
+      <>
+        <div className="fixed inset-0 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-lg relative">
+            <button
+              className="absolute top-3 right-3 text-gray-500 hover:text-red-500"
+              onClick={() => setShowModal(false)}
+            >
+              ✕
+            </button>
+            <h2 className="text-xl font-semibold mb-4 text-gray-800">
+              Post a New Query
+            </h2>
+            <form className="flex gap-4 flex-col">
+              <input
+                type="text"
+                name="queryTitle"
+                value={form.queryTitle}
+                onChange={handleFieldChange}
+                placeholder="Query Title"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-400"
+              />
+              <textarea
+                name="queryDescription"
+                value={form.queryDescription}
+                onChange={handleFieldChange}
+                rows={3}
+                placeholder="Describe your issue..."
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-400"
+              />
+              <select
+                name="queryProject"
+                value={form.queryProject}
+                onChange={handleFieldChange}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-400"
+              >
+                <option value="">Select Project</option>
+                {projects.map((proj) => (
+                  <option key={proj._id} value={proj.projectName}>
+                    {proj.projectName}
+                  </option>
+                ))}
+              </select>
+              <select
+                name="queryPriority"
+                value={form.queryPriority}
+                onChange={handleFieldChange}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-400"
+              >
+                <option value="">Select Priority</option>
+                {priorities.map((p, i) => (
+                  <option key={i} value={p}>
+                    {p}
+                  </option>
+                ))}
+              </select>
+            </form>
+            <div className="flex justify-end gap-3 mt-6">
+              <button
+                onClick={() => setShowModal(false)}
+                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreateQuery}
+                disabled={loading}
+                className="px-5 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-semibold rounded-lg hover:opacity-90"
+              >
+                {loading ? "Posting..." : "Post Query"}
+              </button>
             </div>
           </div>
+        </div>
+        <div
+          className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40"
+          onClick={() => setShowModal(false)}
+        ></div>
+      </>
+    )}
+  </div>
+);
 
-          {/* Backdrop */}
-          <div
-            className="modal-backdrop fade show"
-            onClick={() => setShowModal(false)}
-          ></div>
-        </>
-      )}
-    </div>
-  );
 }

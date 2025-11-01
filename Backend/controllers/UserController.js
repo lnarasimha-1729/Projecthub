@@ -3,7 +3,7 @@ import validator from "validator";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
-import {v2 as cloudinary} from "cloudinary"
+import { v2 as cloudinary } from "cloudinary";
 dotenv.config();
 
 // Create JWT token
@@ -16,10 +16,10 @@ const registerUser = async (req, res) => {
   try {
     const { name, email, password } = req.body;
 
-    // Check if user exists
+    // Check if user exists (email)
     const exists = await userModel.findOne({ email });
     if (exists) {
-      return res.status(400).json({ success: false, message: "User already exists" });
+      return res.status(400).json({ success: false, message: "Email already exists" });
     }
 
     // Validate email and password
@@ -30,14 +30,29 @@ const registerUser = async (req, res) => {
       return res.status(400).json({ success: false, message: "Password must be at least 8 characters" });
     }
 
+    // Check if password already exists (hashed compare)
+    const users = await userModel.find({}, "password"); // fetch all user passwords
+    for (let u of users) {
+      const isSamePassword = await bcrypt.compare(password, u.password);
+      if (isSamePassword) {
+        return res.status(400).json({ success: false, message: "Password already exists, choose a different one" });
+      }
+    }
+
+    // ADMIN CHECK
+    let role = "worker";
+    if (
+      email === process.env.ADMIN_EMAIL &&
+      password === process.env.ADMIN_PASSWORD
+    ) {
+      role = "admin";
+    }
+
     // Hash password
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    // Determine role: admin if matches env, otherwise user
-    const role = (email === process.env.ADMIN_EMAIL) ? "admin" : email?.split("@")[0]?.split(".")[1] || "".toLowerCase();
-
-    // Create new user
+    // Create user
     const newUser = new userModel({
       name,
       email,
@@ -47,22 +62,26 @@ const registerUser = async (req, res) => {
 
     const user = await newUser.save();
 
-    // Generate JWT using role from DB
     const token = createToken(user._id, user.role, user.email, user.name);
 
-    res.status(201).json({ success: true, token });
+    res.status(201).json({
+      success: true,
+      message: "Registration successful",
+      token,
+    });
   } catch (error) {
-    console.error(error);
+    console.error("Error in registerUser:", error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
 
 // LOGIN USER
 const loginUser = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    // Find user by email
+    // Find user
     const user = await userModel.findOne({ email });
     if (!user) {
       return res.status(400).json({ success: false, message: "User does not exist" });
@@ -71,22 +90,29 @@ const loginUser = async (req, res) => {
     // Compare password
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
-      return res.status(400).json({ success: false, message: "Invalid credentials" });
+      return res.status(400).json({ success: false, message: "Invalid password" });
     }
 
-    // Ensure role from DB is correct
-    // Optional: update role if admin email changed
-    if (email === process.env.ADMIN_EMAIL && user.role !== "admin") {
+    // Update role dynamically if admin credentials match
+    if (
+      email === process.env.ADMIN_EMAIL &&
+      process.env.ADMIN_PASSWORD &&
+      password === process.env.ADMIN_PASSWORD &&
+      user.role !== "admin"
+    ) {
       user.role = "admin";
       await user.save();
     }
 
-    // Generate JWT with correct role
-    const token = createToken(user._id, user.role, user.email);
+    const token = createToken(user._id, user.role, user.email, user.name);
 
-    res.status(200).json({ success: true, token });
+    res.status(200).json({
+      success: true,
+      message: "Login successful",
+      token,
+    });
   } catch (error) {
-    console.error(error);
+    console.error("Error in loginUser:", error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
@@ -104,14 +130,11 @@ export const addImage = async (req, res) => {
       return res.status(404).json({ success: false, message: "User not found" });
     }
 
-    // handle single or multiple images
     const files = req.files?.image1 || req.files || (req.file ? [req.file] : []);
-
     if (!files.length) {
       return res.status(400).json({ success: false, message: "No image provided" });
     }
 
-    // Upload all images to Cloudinary
     const imagesUrl = await Promise.all(
       files.map(async (item) => {
         const result = await cloudinary.uploader.upload(item.path, {
@@ -121,9 +144,7 @@ export const addImage = async (req, res) => {
       })
     );
 
-    // Push new images into user's existing image array
     user.image.push(...imagesUrl);
-
     await user.save();
 
     res.status(200).json({
@@ -137,7 +158,6 @@ export const addImage = async (req, res) => {
   }
 };
 
-// backend/controllers/profileController.js
 export const getProfile = async (req, res) => {
   try {
     const { id } = req.params;
@@ -152,5 +172,50 @@ export const getProfile = async (req, res) => {
   }
 };
 
+export const getusers = async (req, res) => {
+  try {
+    const users = await userModel.find();
+    res.status(200).json({ success: true, users });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const updateUserProfile = async (req, res) => {
+  try {
+    const { name, email } = req.body;
+    const { id } = req.params;
+
+    if (!name || !email) {
+      return res.status(400).json({ success: false, message: "Name and email are required" });
+    }
+
+    if (req.user.id !== id) {
+      return res.status(403).json({ success: false, message: "Not authorized to update this profile" });
+    }
+
+    const updatedUser = await userModel.findByIdAndUpdate(
+      id,
+      { name, email },
+      { new: true, runValidators: true }
+    );
+
+    if (!updatedUser) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+
+    const token = createToken(updatedUser._id, updatedUser.role, updatedUser.email, updatedUser.name);
+
+    res.status(200).json({
+      success: true,
+      message: "Profile updated successfully",
+      user: updatedUser,
+      token,
+    });
+  } catch (err) {
+    console.error("Error updating profile:", err);
+    res.status(500).json({ success: false, message: "Failed to update profile" });
+  }
+};
 
 export { registerUser, loginUser };

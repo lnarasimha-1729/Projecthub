@@ -1,14 +1,14 @@
 import React, { useContext, useState, useEffect } from "react";
 import { UsersContext } from "../Context/UserContext";
 import { motion } from "framer-motion";
-import {jwtDecode} from "jwt-decode";
+import { jwtDecode } from "jwt-decode";
+import axios from "axios";
 
 // react-calendar
 import Calendar from "react-calendar";
 import "react-calendar/dist/Calendar.css";
 
 export default function ClockEntries() {
-
   function formatLocalYYYYMMDD(dateLike) {
     const d = new Date(dateLike);
     const yyyy = d.getFullYear();
@@ -23,6 +23,27 @@ export default function ClockEntries() {
     return new Date(y, m - 1, d);
   }
 
+  // helper: format a time for display (HH:MM)
+  const formatTime = (iso) => {
+    if (!iso) return "-";
+    try {
+      return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    } catch {
+      return "-";
+    }
+  };
+
+  // helper: format duration in ms -> "Xh Ym"
+  const formatDuration = (ms) => {
+    if (ms == null || isNaN(ms) || ms < 0) return "-";
+    const totalMinutes = Math.floor(ms / (1000 * 60));
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    if (hours <= 0 && minutes <= 0) return "0m";
+    if (hours <= 0) return `${minutes}m`;
+    return `${hours}h ${minutes}m`;
+  };
+
   /* -------------------------
      Component state & context
      ------------------------- */
@@ -36,6 +57,7 @@ export default function ClockEntries() {
     clockEntries,
     createClockEntry,
     syncClockEntries,
+    backendUrl,
     workers,
     projects,
     token,
@@ -63,7 +85,6 @@ export default function ClockEntries() {
       const userName = email?.split("@")[0]?.split(".")[0] || "";
       setName(userName);
 
-      // flexible role detection (common token shapes)
       const role =
         (decoded && (decoded.role || decoded.userType || decoded.user?.role || decoded.type)) ||
         "";
@@ -154,60 +175,80 @@ export default function ClockEntries() {
       )
     : (clockEntries || []);
 
+  // Build table rows: pair clock-in with the next clock-out for same worker/project
   const tableRows = entriesForSelectedDay
     .slice()
     .sort((a, b) => new Date(a.time) - new Date(b.time))
     .reduce((acc, entry) => {
+      // Normalize worker/project strings
+      const workerName = entry.worker || "";
+      const projectName = entry.project || "";
+
       if (entry.type === "clock-in") {
         acc.push({
-          worker: entry.worker,
-          project: entry.project,
+          worker: workerName,
+          project: projectName,
           clockIn: entry.synced
-            ? new Date(entry.time).toLocaleTimeString([], {
-                hour: "2-digit",
-                minute: "2-digit",
-              })
+            ? formatTime(entry.time)
             : "Waiting",
           clockInSynced: entry.synced,
           clockOut: "-",
           clockOutSynced: true,
+          // raw ISO times for accurate duration calc (may be available even if unsynced)
+          clockInRaw: entry.time,
+          clockOutRaw: null,
         });
       } else if (entry.type === "clock-out") {
-        const lastRow = acc
+        // find last unmatched clock-in row for same worker+project
+        const lastRowIndex = acc
           .slice()
           .reverse()
-          .find(
+          .findIndex(
             (r) =>
-              r.worker === entry.worker &&
-              r.project === entry.project &&
-              r.clockOut === "-"
+              r.worker === workerName &&
+              r.project === projectName &&
+              (r.clockOut === "-" || !r.clockOutRaw)
           );
-        if (lastRow) {
-          lastRow.clockOut = entry.synced
-            ? new Date(entry.time).toLocaleTimeString([], {
-                hour: "2-digit",
-                minute: "2-digit",
-              })
-            : "Waiting";
+        if (lastRowIndex !== -1) {
+          // convert reverse index to original index
+          const idx = acc.length - 1 - lastRowIndex;
+          const lastRow = acc[idx];
+          lastRow.clockOut = entry.synced ? formatTime(entry.time) : "Waiting";
           lastRow.clockOutSynced = entry.synced;
+          lastRow.clockOutRaw = entry.time;
+          // compute hours for this row below after loop
         } else {
+          // no matching clock-in — create a standalone row with only clock-out
           acc.push({
-            worker: entry.worker,
-            project: entry.project,
+            worker: workerName,
+            project: projectName,
             clockIn: "-",
             clockInSynced: true,
-            clockOut: entry.synced
-              ? new Date(entry.time).toLocaleTimeString([], {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })
-              : "Waiting",
+            clockOut: entry.synced ? formatTime(entry.time) : "Waiting",
             clockOutSynced: entry.synced,
+            clockInRaw: null,
+            clockOutRaw: entry.time,
           });
         }
       }
       return acc;
-    }, []);
+    }, [])
+    // After pairing, compute hours field for each row
+    .map((r) => {
+      let hours = "-";
+      if (r.clockInRaw && r.clockOutRaw) {
+        // both present -> difference
+        const diffMs = new Date(r.clockOutRaw).getTime() - new Date(r.clockInRaw).getTime();
+        hours = diffMs >= 0 ? formatDuration(diffMs) : "-";
+      } else if (r.clockInRaw && !r.clockOutRaw) {
+        // still clocked in -> show running duration from clockIn to now
+        const diffMs = Date.now() - new Date(r.clockInRaw).getTime();
+        hours = diffMs >= 0 ? formatDuration(diffMs) : "-";
+      } else {
+        hours = "-";
+      }
+      return { ...r, hours };
+    });
 
   const selectedLabel = selectedDate
     ? new Date(parseYYYYMMDDToLocalDate(selectedDate)).toDateString()
@@ -219,7 +260,7 @@ export default function ClockEntries() {
   return (
     <div className="bg-gradient-to-br from-indigo-50 via-white to-purple-100 min-h-screen py-10 px-6 mt-26">
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between mb-8">
+      <div className="flex flex-wrap items-center justify-between mb-2">
         <div>
           <p className="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-purple-600">
             Time Clock Dashboard
@@ -238,7 +279,6 @@ export default function ClockEntries() {
 
           {showSyncPrompt ? (
             <motion.button
-              whileHover={{ scale: 1.05 }}
               onClick={syncClockEntries}
               className="px-4 py-2 rounded-xl bg-blue-500 text-white shadow hover:bg-blue-600 transition"
             >
@@ -253,7 +293,7 @@ export default function ClockEntries() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mb-3">
         {/* Total Workers — visible to everyone */}
         <StatCard
           icon="https://img.icons8.com/ultraviolet/40/workers-male.png"
@@ -309,8 +349,18 @@ export default function ClockEntries() {
           {workersList
             .filter((worker) => worker.Name.toLowerCase() === currentUserLower)
             .map((worker, index) => {
-              const lastEntry = getLastEntry(worker.Name);
-              const isClockedIn = lastEntry?.type === "clock-in";
+              const lastEntry = [...(clockEntries || [])]
+                .reverse()
+                .find(
+                  (e) =>
+                    (e.worker || "").toLowerCase() === (worker.Name || "").toLowerCase() &&
+                    formatLocalYYYYMMDD(e.time) === todayLocalYYYYMMDD
+                );
+              const isClockedIn =
+                lastEntry &&
+                lastEntry.type === "clock-in" &&
+                formatLocalYYYYMMDD(lastEntry.time) === todayLocalYYYYMMDD;
+
               const assignedProject = (projects || []).find((p) => p.projectName === lastEntry?.project);
               const clockInTime = isClockedIn && lastEntry?.time
                 ? new Date(lastEntry.time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
@@ -332,23 +382,62 @@ export default function ClockEntries() {
                   <div>
                     {!isClockedIn ? (
                       <motion.button
-                        whileHover={{ scale: 1.05 }}
                         onClick={() => {
-                          if (window.confirm(`Clock in ${worker.Name}?`)) {
-                            createClockEntry({
-                              worker: worker.Name,
-                              project: (projects && projects[0]?.projectName) || "N/A",
-                              type: "clock-in",
-                            });
-                          }
-                        }}
+  if (window.confirm(`Clock in ${worker.Name}?`)) {
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude, longitude } = position.coords;
+
+        console.log(latitude, longitude);
+        
+
+        // 1️⃣ Create clock entry in frontend
+        createClockEntry({
+          worker: worker.Name,
+          project: (projects && projects[0]?.projectName) || "N/A",
+          type: "clock-in",
+        });
+
+        // 2️⃣ Update worker model in backend with location
+        try {
+          await axios.post(`${backendUrl}/api/clock-in`, {
+            workerId : worker._id,
+            latitude,
+            longitude,
+          });
+          console.log("✅ Worker location stored successfully in DB");
+        } catch (err) {
+          console.error("❌ Error saving worker location:", err);
+        }
+      },
+      (error) => {
+        console.error("⚠️ Location access denied or unavailable:", error);
+        createClockEntry({
+          worker: worker.Name,
+          project: (projects && projects[0]?.projectName) || "N/A",
+          type: "clock-in",
+        });
+      }
+    );
+  } else {
+    alert("Geolocation not supported by this browser");
+    createClockEntry({
+      worker: worker.Name,
+      project: (projects && projects[0]?.projectName) || "N/A",
+      type: "clock-in",
+    });
+  }
+}
+
+}}
+
                         className="px-3 py-1 rounded-xl font-semibold shadow bg-green-700 text-white hover:bg-green-800"
                       >
                         Clock In
                       </motion.button>
                     ) : (
                       <motion.button
-                        whileHover={{ scale: 1.05 }}
                         onClick={() => {
                           if (window.confirm(`Clock out ${worker.Name}?`)) {
                             createClockEntry({
@@ -383,7 +472,7 @@ export default function ClockEntries() {
         </div>
 
         {/* Right column: recent entries */}
-        <div className="bg-white/70 backdrop-blur-md border border-gray-200 rounded-3xl shadow-lg p-6 lg:col-span-2 overflow-auto max-h-[600px]">
+        <div className="bg-white/70 backdrop-blur-md border border-gray-200 rounded-3xl shadow-md p-6 lg:col-span-2 overflow-auto max-h-[600px] -ml-4">
           <div className="flex items-center justify-between mb-4">
             <p className="text-xl font-bold text-gray-800">Recent Entries</p>
             <div className="text-sm text-gray-600">Filter: {selectedLabel}</div>
@@ -396,20 +485,22 @@ export default function ClockEntries() {
                 <th className="py-2 px-3 font-semibold text-gray-700">PROJECT</th>
                 <th className="py-2 px-3 font-semibold text-gray-700">CLOCK IN</th>
                 <th className="py-2 px-3 font-semibold text-gray-700">CLOCK OUT</th>
+                <th className="py-2 px-3 font-semibold text-gray-700">HOURS</th>
               </tr>
             </thead>
             <tbody>
               {tableRows.map((row, i) => (
                 <tr key={i} className="hover:bg-gray-50">
-                  <td className="py-2 px-3 text-gray-800">{row.worker.toLowerCase()}</td>
+                  <td className="py-2 px-3 text-gray-800">{(row.worker || "").toLowerCase()}</td>
                   <td className="py-2 px-3 text-gray-800">{row.project}</td>
                   <td className={`py-2 px-3 font-medium ${row.clockInSynced ? "text-green-600" : "text-yellow-600"}`}>{row.clockIn}</td>
                   <td className={`py-2 px-3 font-medium ${row.clockOutSynced ? "text-red-600" : "text-yellow-600"}`}>{row.clockOut}</td>
+                  <td className="py-2 px-3 text-gray-800 font-medium">{row.hours}</td>
                 </tr>
               ))}
               {tableRows.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="py-6 text-center text-gray-500">No entries for {selectedLabel}.</td>
+                  <td colSpan={5} className="py-6 text-center text-gray-500">No entries for {selectedLabel}.</td>
                 </tr>
               )}
             </tbody>
@@ -423,11 +514,11 @@ export default function ClockEntries() {
 /* -------------------- Stat Card -------------------- */
 function StatCard({ icon, title, value, gradient }) {
   return (
-    <motion.div whileHover={{ scale: 1.03 }} className={`flex items-center p-4 rounded-3xl shadow-lg bg-white/70 backdrop-blur-md border border-gray-200`}>
+    <motion.div className={`flex items-center px-4 py-2 rounded-3xl shadow-md bg-white/70 backdrop-blur-md border border-gray-200`}>
       <div className={`w-12 h-12 flex items-center justify-center rounded-full bg-gradient-to-br ${gradient} text-white text-xl shadow-md mr-4`}>
         <img src={icon} alt={title} className="w-6 h-6" />
       </div>
-      <div>
+      <div className="flex flex-col">
         <p className="text-gray-600 font-medium">{title}</p>
         <p className="text-2xl font-bold text-gray-800">{value}</p>
       </div>

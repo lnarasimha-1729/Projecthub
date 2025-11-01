@@ -5,21 +5,30 @@ import { motion } from "framer-motion";
 import {jwtDecode} from "jwt-decode";
 
 export default function Dashboard() {
-  const { projects, workers, clockEntries, createClockEntry, syncClockEntries, token } =
+  const { projects, workers, clockEntries, fetchWorkers, fetchClockEntries, createClockEntry, syncClockEntries, token } =
     useContext(UsersContext);
+
+    const [email, setEmail] = useState("")
+
+    useEffect(() => {
+  fetchWorkers();
+  fetchClockEntries;
+}, []);
+
+
+
 
   /** USER NAME */
   const userName = useMemo(() => {
     try {
       if (!token) return "";
       const { email } = jwtDecode(token);
+      setEmail(email)
       return email?.split("@")[0]?.split(".")[0] || "";
     } catch {
       return "";
     }
   }, [token]);
-
-  console.log(userName);
   
 
   /** USER ROLE */
@@ -47,6 +56,9 @@ const userRole = useMemo(() => {
     };
   }, []);
 
+  
+  
+
   /** SYNC PROMPT FOR UNSYNCED CLOCK ENTRIES */
   const [showSyncPrompt, setShowSyncPrompt] = useState(false);
   useEffect(() => {
@@ -65,16 +77,18 @@ const userRole = useMemo(() => {
 
   /** ACTIVE WORKERS COUNT */
   const activeWorkerCount = useMemo(() => {
-    const busyWorkers = new Set();
-    projects.forEach((project) => {
+    const busy = new Set();
+    (projects || []).forEach((project) => {
       if (project.projectStatus === "active") {
-        project.assignedWorkers?.forEach((w) => busyWorkers.add(w.Name));
+        project.assignedWorkers?.forEach((w) => {
+          const id = (w && (w.workerId || w._id)) || w;
+          if (id) busy.add(String(id));
+        });
       }
     });
-    return busyWorkers.size;
+    return busy.size;
   }, [projects]);
 
-  console.log(userRole);
   
 
   /** ACTIVE PROJECTS */
@@ -93,11 +107,21 @@ const userRole = useMemo(() => {
 
   /** HELPER: GET LAST ENTRY FOR WORKER */
   function getLastEntry(workerName) {
-    return [...clockEntries].reverse().find((e) => e.worker.toLowerCase() === workerName.toLowerCase());
-  }
+  const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
+  return [...clockEntries]
+    .reverse()
+    .find((e) => {
+      const entryDate = new Date(e.time).toISOString().split("T")[0];
+      return (
+        e.worker.toLowerCase() === workerName.toLowerCase() &&
+        entryDate === today
+      );
+    });
+}
+
 
   return (
-    <div className="p-8 min-h-screen relative overflow-hidden mt-26 z-0">
+    <div className="p-8 min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-100 relative overflow-hidden mt-26 z-0">
       {/* Background */}
       <div className="absolute top-0 left-0 w-full h-full -z-10">
         <div className="absolute w-full h-full bg-gradient-to-br from-indigo-100 via-purple-100 to-pink-50 opacity-80" />
@@ -111,7 +135,7 @@ const userRole = useMemo(() => {
 
       {/* Header */}
       <div className="flex items-center justify-center gap-4">
-      <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="mb-10 text-center md:text-left relative z-10">
+      <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="mb-4 text-center md:text-left relative z-10">
         <p className="text-3xl font-extrabold bg-gradient-to-r from-blue-600 via-purple-600 to-pink-500 bg-clip-text text-transparent mb-2 drop-shadow-lg">
           Project Management Dashboard
         </p>
@@ -202,12 +226,12 @@ const userRole = useMemo(() => {
       </div> */}
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-2.5 mb-10 perspective-1000 relative z-10">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-2.5 mb-6 perspective-1000 relative z-10">
         {dashboardStats.map((item, idx) => (
           <motion.div
             key={idx}
-            className="bg-white/90 backdrop-blur-md shadow-xl rounded-2xl p-3 flex items-center justify-center border border-gray-200 transform-gpu"
-            whileHover={{ boxShadow: "0 25px 50px rgba(0,0,0,0.3)" }}
+            className="bg-white/90 backdrop-blur-md shadow-md rounded-2xl p-3 flex items-center justify-center border border-gray-200 transform-gpu"
+            
             transition={{ type: "spring", stiffness: 200, damping: 12 }}
           >
             <div className="text-3xl mb-3">{item.icon}</div>
@@ -226,11 +250,10 @@ const userRole = useMemo(() => {
           className="md:col-span-2 bg-white/90 backdrop-blur-md shadow-2xl rounded-3xl p-6"
           initial={{ opacity: 0, y: 40 }}
           animate={{ opacity: 1, y: 0 }}
-          whileHover={{ boxShadow: "0 30px 60px rgba(0,0,0,0.35)" }}
           transition={{ type: "spring", stiffness: 150 }}
         >
           <p className="text-2xl font-semibold mb-4 text-gray-700">Activity Last 7 Days</p>
-          <div className="h-44 bg-gradient-to-r from-indigo-100 to-blue-50 rounded-xl flex items-center justify-center text-blue-300 border border-indigo-100 shadow-inner">
+          <div className="h-44 bg-gradient-to-r from-indigo-100 to-blue-50 rounded-2xl flex items-center justify-center text-blue-300 border border-indigo-100 shadow-inner">
             [Chart Placeholder]
           </div>
         </motion.div>
@@ -239,8 +262,7 @@ const userRole = useMemo(() => {
         <div className="flex flex-col gap-6">
           {/* Who's Online */}
           <motion.div
-            className="bg-white/90 backdrop-blur-md shadow-xl rounded-3xl p-6"
-            whileHover={{ boxShadow: "0 25px 50px rgba(0,0,0,0.3)" }}
+            className="bg-white/90 backdrop-blur-md shadow-xl rounded-2xl p-6"
           >
             <p className="text-2xl font-semibold mb-4 text-gray-700">Who's Online?</p>
             <div className="text-center text-gray-400 mt-6">[No one online currently]</div>
@@ -248,8 +270,7 @@ const userRole = useMemo(() => {
 
           {/* Recent Activity */}
           <motion.div
-            className="bg-white/90 backdrop-blur-md shadow-xl rounded-3xl p-6"
-            whileHover={{ boxShadow: "0 25px 50px rgba(0,0,0,0.3)" }}
+            className="bg-white/90 backdrop-blur-md shadow-xl rounded-2xl p-6"
           >
             <p className="text-2xl font-semibold mb-4 text-gray-700">Recent Activity</p>
             {lastEntry ? (

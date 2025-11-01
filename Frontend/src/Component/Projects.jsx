@@ -61,7 +61,7 @@ const Projects = () => {
     if (token) {
       try {
         const decoded = jwtDecode(token);
-        setRole(decoded.role || "user");
+        setRole(decoded.role || "worker");
         setUserId(decoded.email?.split("@")[0].split(".")[0] || null);
       } catch (err) {
         console.error("Invalid token", err);
@@ -109,7 +109,12 @@ const Projects = () => {
   const activeProjects = filteredProjects.filter(
     (p) => p.projectStatus === "active" || p.projectStatus === "completed"
   );
+
+
   const onHoldProjects = filteredProjects.filter((p) => p.projectStatus === "hold");
+
+  const activeProject = projects.filter((p) => p.projectStatus === "active")
+  const onHoldProject = projects.filter((p) => p.projectStatus === "hold")
 
   // --- Input Handlers ---
   const handleChange = (e) =>
@@ -122,6 +127,7 @@ const Projects = () => {
     const files = Array.from(e.target.files || []);
     setPdfFiles(files);
   };
+  
 
   // --- Create Project ---
   const handleCreateProject = async (e) => {
@@ -165,30 +171,38 @@ const Projects = () => {
     }
   };
 
+  // compute project progress as average of task completion %
   const calculateProjectProgress = (project) => {
-    if (!project?.tasks || project.tasks.length === 0) return 0;
-    const totalTasks = project.tasks.length;
-    let progress = 0;
-    project.tasks.forEach((task) => {
-      const milestones = task.milestones || [];
-      const taskWeight = 100 / totalTasks;
-      if (milestones.length === 0) {
-        progress += 0;
+    if (!project || !Array.isArray(project.tasks) || project.tasks.length === 0) return 0;
+
+    let totalProgress = 0;
+    const tasks = project.tasks;
+
+    tasks.forEach((task) => {
+      if (Array.isArray(task.milestones) && task.milestones.length > 0) {
+        const completedMilestones = task.milestones.filter((m) => m.completed).length;
+        totalProgress += (completedMilestones / task.milestones.length) * 100;
       } else {
-        const completed = milestones.filter((ms) => ms.completed).length;
-        progress += (completed / milestones.length) * taskWeight;
+        // If no milestones, treat as 100% only if explicitly marked completed
+        totalProgress += task.completed ? 100 : 0;
       }
     });
-    return Math.round(progress);
+
+    const averageProgress = totalProgress / tasks.length;
+    return Math.round(averageProgress);
   };
+
+
+
 
   // --- Progress Modal Handlers ---
   const openProgressModal = (project) => {
     setProgressModal({ open: true, project });
-    setProgressValue(project.progress || 0);
+    setProgressValue(calculateProjectProgress(project) || 0);
     setProgressImages([]);
     setProgressPdfs([]);
   };
+
   const handleProgressImages = (e) => setProgressImages(Array.from(e.target.files || []));
   const handleProgressPdfs = (e) => setProgressPdfs(Array.from(e.target.files || []));
   const handleProgressUpdate = async () => {
@@ -198,6 +212,7 @@ const Projects = () => {
       setLoading(true);
       const data = new FormData();
       data.append("progress", progressValue);
+
       [...progressImages, ...progressPdfs].forEach((file) => data.append("files", file));
       await updateProgress(id, data);
       toast.success("✅ Progress & files uploaded successfully!");
@@ -287,9 +302,8 @@ const Projects = () => {
         </div>
         {role === "admin" && (
           <motion.button
-            whileHover={{ scale: 1.05 }}
             onClick={() => setShowModal(true)}
-            className="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white font-semibold shadow-lg hover:shadow-xl transition-all rounded"
+            className="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white font-semibold shadow-md transition-all rounded"
           >
             + New Project
           </motion.button>
@@ -298,7 +312,7 @@ const Projects = () => {
 
       <div className="mt-4">
         {activeProjects.length > 0 ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 space-y-4 mt-4">
             {activeProjects.map((item) => (
               <motion.div
                 key={item._id}
@@ -307,7 +321,7 @@ const Projects = () => {
                 className="relative z-0 bg-white border rounded-2xl shadow-xl hover:shadow-2xl p-6 flex flex-col overflow-hidden"
               >
                 <div className="w-full text-end">
-                  <span className={`text-end px-2 py-0.5 rounded-lg text-sm text-white -mt-16 w-fit ${item.projectStatus === "active" ? "bg-green-700":"bg-red-500"}`}>{item.projectStatus}</span>
+                  <span className={`text-end px-2 py-0.5 rounded-lg text-sm text-white -mt-16 w-fit ${item.projectStatus === "active" ? "bg-green-700" : "bg-red-500"}`}>{item.projectStatus}</span>
                 </div>
 
                 <div className="absolute bg-gradient-to-br from-purple-100/40 via-blue-100/30 to-pink-100/30 opacity-60 rounded-3xl pointer-events-none"></div>
@@ -330,17 +344,23 @@ const Projects = () => {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2 mb-2 mt-2">
-                    <div className="w-full h-4 bg-gray-200 rounded-full">
-                      <div
-                        className="h-4 bg-green-500 rounded-full transition-all"
-                        style={{ width: `${calculateProjectProgress(item)}%` }}
-                      ></div>
-                    </div>
-                    <span className="text-sm font-medium">{calculateProjectProgress(item)}%</span>
-                  </div>
+                  {(() => {
+                    const percent = calculateProjectProgress(item);
+                    return (
+                      <div className="flex items-center gap-1 mb-2">
+                        <div className="w-full h-4 bg-gray-200 rounded-full">
+                          <div
+                            className="h-4 bg-green-500 rounded-full transition-all"
+                            style={{ width: `${percent}%` }}
+                          />
+                        </div>
+                        <span className="text-sm font-medium">{percent}%</span>
+                      </div>
+                    );
+                  })()}
 
-                  <div className="mb-4">
+
+                  <div className="mb-3">
                     <p className="font-semibold text-gray-700 mb-2">Supervisor:</p>
                     {item.supervisors ? (
                       <motion.span whileHover={{ scale: 1.05 }} className="bg-gradient-to-r from-purple-200 to-purple-300 text-purple-800 text-sm font-medium px-3 py-1 rounded-full">
@@ -349,7 +369,7 @@ const Projects = () => {
                     ) : <p className="text-sm text-gray-400">No supervisor assigned</p>}
                   </div>
 
-                  <div className="mb-4">
+                  <div className="mb-2">
                     <p className="font-semibold text-gray-700 mb-2">Assigned Team:</p>
                     <div className="flex flex-wrap gap-2">
                       {item.assignedWorkers?.length > 0 ? (
@@ -477,8 +497,8 @@ const Projects = () => {
 
       {/* STATS */}
       <div className="flex gap-4 mt-6">
-        <Donut active={activeProjects} onHold={onHoldProjects} />
-        <Team_Allocation projects={activeProjects} />
+        <Donut active={activeProject} onHold={onHoldProject} />
+        <Team_Allocation projects={activeProject} />
       </div>
 
       {/* MODALS */}

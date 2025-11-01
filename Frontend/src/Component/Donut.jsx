@@ -7,7 +7,6 @@ import { Doughnut } from "react-chartjs-2";
 ChartJS.register(ChartDataLabels);
 
 const Donut = ({ active = [], onHold = [] }) => {
-  console.log(active);
   
   const total = active.length + onHold.length;
   const activePercentage = total === 0 ? 0 : ((active.length / total) * 100).toFixed(1);
@@ -61,7 +60,7 @@ const Donut = ({ active = [], onHold = [] }) => {
   };
 
   return (
-    <div className="w-1/2 mt-8 h-[410px] bg-white rounded-xl shadow-md p-2 flex items-center justify-center">
+    <div className="w-1/2 mt-0 h-[410px] bg-white rounded-xl shadow-md p-2 flex items-center justify-center">
       <Doughnut data={data} options={options} />
     </div>
   );

@@ -13,6 +13,8 @@ const TaskSchema = new mongoose.Schema({
   completed: { type: Boolean, default: false },
   completedAt: { type: Date }, // ✅ Add this line
   milestones: [MilestoneSchema],
+  assignedWorkers: [{ type: String }]
+
 });
 
 
@@ -37,7 +39,8 @@ const ProjectSchema = new mongoose.Schema(
     tasks: [TaskSchema],
     progress: { type: Number, default: 0 },
     images: [String],
-    pdfs: [String], // ✅ renamed for consistency with backend controller
+    pdfs: [String],
+    closingBudget : {type : Number, default : 0}
   },
   { timestamps: true }
 );

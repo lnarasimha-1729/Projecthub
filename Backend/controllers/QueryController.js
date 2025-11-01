@@ -30,28 +30,41 @@ const getQueries = async (req, res) => {
   }
 };
 
-const updateStatus = async (req, res) => {
+const updateQueryStatus = async (req, res) => {
   try {
-    const { id, status } = req.body;
+    const { id, status } = req.body; // ✅ fix: read from body not params
 
-    // Find the query by ID
     const query = await QueryModel.findById(id);
-
     if (!query) {
-      return res.status(404).json({ message: "Query not found" });
+      return res.status(404).json({ success: false, message: "Query not found" });
     }
-if (status === "Open") query.status = "InProgress";
-    else if (status === "InProgress") query.status = "Resolved";
 
-    // Save the updated document
+    const validStatuses = ["Open", "Resolved"];
+
+    // ✅ If frontend sends a valid status, use it; else toggle automatically
+    if (status && validStatuses.includes(status)) {
+      query.status = status;
+    } else {
+      if (query.status === "Open") query.status = "Resolved";
+      else query.status = "Open";
+    }
+
     await query.save();
 
-    res.status(200).json({ message: "Status updated successfully", query });
+    res.json({
+      success: true,
+      message: "✅ Query status updated successfully",
+      query,
+    });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Server error", error });
+    console.error("Error in updateQueryStatus:", error);
+    res.status(500).json({ success: false, message: error.message });
   }
 };
+
+
+
+
 const deleteQuery = async(req,res)=>{
   try{
     const {id} = req.body
@@ -62,4 +75,4 @@ const deleteQuery = async(req,res)=>{
 }
 
 
-export { createQuery, getQueries, updateStatus, deleteQuery };
+export { createQuery, getQueries, updateQueryStatus, deleteQuery };

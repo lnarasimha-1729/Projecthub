@@ -1,6 +1,7 @@
 // backend/controllers/ProjectController.js
 import ProjectModel from "../models/ProjectModel.js";
 import WorkerModel from "../models/WorkerModel.js";
+import mongoose from "mongoose";
 
 /**
  * Create new project (handles multiple images + single pdf)
@@ -136,86 +137,118 @@ export const updateStatus = async (req, res) => {
 
 export const updateProgress = async (req, res) => {
   try {
-    const { id, progress } = req.body;
-    if (!id) return res.status(400).json({ success: false, message: "Project ID required" });
+    // Accept token in either Authorization header or token header if you use that pattern
+    const authHeader = req.headers?.authorization || req.headers?.token || "";
+    // (Optional) validate token here if you need to authorize the request
+
+    // parse input
+    const id = req.body?.id || req.body?.projectId || null;
+    const rawProgress = req.body?.progress;
+
+    if (!id) {
+      return res.status(400).json({ success: false, message: "Project ID required (field: id)" });
+    }
 
     const project = await ProjectModel.findById(id);
-    if (!project) return res.status(404).json({ success: false, message: "Project not found" });
+    if (!project) {
+      return res.status(404).json({ success: false, message: "Project not found" });
+    }
 
-    // Keep previous status to avoid double-counting
     const prevStatus = project.projectStatus;
 
     // Ensure arrays exist
     project.images = Array.isArray(project.images) ? project.images : [];
     project.pdfs = Array.isArray(project.pdfs) ? project.pdfs : [];
 
-    // Normalize uploaded files from multer (unchanged from your code)
+    // Normalize uploaded files from multer (support many shapes)
     let allFiles = [];
     if (Array.isArray(req.files)) {
       allFiles = req.files;
     } else if (req.files && typeof req.files === "object") {
+      // req.files could be an object with field names -> arrays
       allFiles = Object.values(req.files).flat();
     }
+
+    // Accept files passed in `req.body.files` if your client encoded differently (rare)
+    // but primary support is multer req.files
+    const imageNames = [];
+    const pdfNames = [];
+
     allFiles.forEach((f) => {
       if (!f || !f.mimetype) return;
-      if (f.mimetype.startsWith("image/")) project.images.push(f.filename);
-      else if (f.mimetype === "application/pdf") project.pdfs.push(f.filename);
+      // f.filename is what multer stores after you configured storage.filename
+      const filename = f.filename || f.originalname || f.name;
+      if (f.mimetype.startsWith("image/")) imageNames.push(filename);
+      else if (f.mimetype === "application/pdf" || filename.toLowerCase().endsWith(".pdf")) pdfNames.push(filename);
+      else {
+        // Unknown type -> keep in images by default
+        imageNames.push(filename);
+      }
     });
 
-    // Update progress
-    if (progress !== undefined) {
-      const numeric = Number(progress);
-      if (!Number.isNaN(numeric)) project.progress = Math.min(100, Math.max(0, numeric));
+    // Append new file names (avoid duplicates)
+    if (imageNames.length > 0) {
+      project.images = Array.from(new Set([...(project.images || []), ...imageNames]));
+    }
+    if (pdfNames.length > 0) {
+      project.pdfs = Array.from(new Set([...(project.pdfs || []), ...pdfNames]));
+    }
 
-      // When it reaches 100, mark completed and increment workers' counters
-      if (numeric === 100) {
-        project.projectStatus = "completed";
+    // Update numeric progress if provided
+    if (typeof rawProgress !== "undefined" && rawProgress !== null && rawProgress !== "") {
+      const numeric = Number(rawProgress);
+      if (!Number.isNaN(numeric)) {
+        project.progress = Math.min(100, Math.max(0, Math.round(numeric)));
+      }
+    }
 
-        // Only perform increment if it wasn't already completed
-        if (prevStatus !== "completed" && Array.isArray(project.assignedWorkers) && project.assignedWorkers.length) {
-          // Normalize assignedWorkers to array of IDs
-          const workerIds = project.assignedWorkers.map((w) => {
-            // if stored as object like { workerId: "..."} or { id: "..." }
-            if (typeof w === "object" && w !== null) {
-              return w.workerId || w.id || w._id || null;
-            }
-            return w; // string or ObjectId
-          }).filter(Boolean);
+    // If it reaches 100 -> mark completed (and increment worker counters once)
+    if (project.progress === 100) {
+      project.projectStatus = "completed";
 
-          // convert to ObjectId where appropriate (robust)
-          const normalizedIds = workerIds.map((wid) => {
-            try {
-              return mongoose.Types.ObjectId(wid);
-            } catch {
-              return wid; // leave as-is if can't convert
-            }
-          });
+      if (prevStatus !== "completed" && Array.isArray(project.assignedWorkers) && project.assignedWorkers.length) {
+        // Normalize assignedWorkers to IDs
+        const workerIds = project.assignedWorkers
+          .map((w) => {
+            if (!w) return null;
+            if (typeof w === "object") return w.workerId || w.id || w._id || null;
+            return w;
+          })
+          .filter(Boolean);
 
-          // Run updateMany and capture result
+        const normalized = workerIds.map((wid) => {
+          try {
+            return mongoose.Types.ObjectId(wid);
+          } catch {
+            return wid;
+          }
+        });
+
+        try {
           const updateResult = await WorkerModel.updateMany(
-            { _id: { $in: normalizedIds } },
+            { _id: { $in: normalized } },
             { $inc: { completedProjects: 1 } }
           );
-
-          console.log("updateMany result:", updateResult); // contains modifiedCount (mongoose v6+)
+          console.log("Worker counters updated:", updateResult);
+        } catch (err) {
+          console.error("Failed to increment worker counters:", err);
         }
-
-        // clear assigned workers and supervisors (as per original logic)
-        project.assignedWorkers = [];
-        project.supervisors = "";
       }
+
+      // Optionally clear assignedWorkers/supervisors if you want
+      // project.assignedWorkers = [];
+      // project.supervisors = "";
     }
 
     await project.save();
 
-    console.log("🟢 Updated project:", project);
-
     return res.status(200).json({ success: true, project });
   } catch (error) {
-    console.error("❌ Error in updateProgress:", error);
-    return res.status(500).json({ success: false, message: error.message });
+    console.error("Error in updateProgress:", error);
+    return res.status(500).json({ success: false, message: error.message || "Server error" });
   }
 };
+
 
 
 
@@ -250,15 +283,10 @@ export const addTask = async (req, res) => {
  */
 export const addMilestone = async (req, res) => {
   try {
-    console.log("📩 Request body:", req.body);
-
     const { projectId, taskId, title } = req.body;
 
     if (!projectId || !taskId || !title) {
-      console.log("❌ Missing fields:", { projectId, taskId, title });
-      return res
-        .status(400)
-        .json({ success: false, message: "Project ID, Task ID, and milestone title required" });
+      return res.status(400).json({ success: false, message: "Project ID, Task ID, and milestone title required" });
     }
 
     const project = await ProjectModel.findById(projectId);
@@ -269,13 +297,14 @@ export const addMilestone = async (req, res) => {
     if (!task)
       return res.status(404).json({ success: false, message: "Task not found" });
 
-    console.log("✅ Before adding milestone:", task.milestones);
+    // ✅ Add the new milestone
+    task.milestones.push({ title, completed: false });
 
-    task.milestones.push({ title });
+    // ✅ Since a new milestone is added, mark task as incomplete again
+    task.completed = false;
+    task.completedAt = null;
 
     await project.save();
-
-    console.log("✅ Milestone added successfully!");
 
     return res.status(201).json({ success: true, project });
   } catch (error) {
@@ -287,6 +316,60 @@ export const addMilestone = async (req, res) => {
     });
   }
 };
+
+
+export const assignWorkerToTask = async (req, res) => {
+  try {
+    const { projectId, taskId } = req.params;
+    const { workerId } = req.body;
+
+    console.log("Request body:", req.body);
+
+    if (!projectId || !taskId || !workerId) {
+      return res.status(400).json({
+        success: false,
+        message: "projectId, taskId, and workerId are required",
+      });
+    }
+
+    // ✅ Find project
+    const project = await ProjectModel.findById(projectId);
+    if (!project) {
+      return res.status(404).json({ success: false, message: "Project not found" });
+    }
+
+    // ✅ Find task inside project
+    const task = project.tasks.id(taskId);
+    if (!task) {
+      return res.status(404).json({ success: false, message: "Task not found" });
+    }
+
+    // ✅ Ensure array exists
+    if (!Array.isArray(task.assignedWorkers)) task.assignedWorkers = [];
+
+    // ✅ Store workerId
+    if (!task.assignedWorkers.includes(workerId)) {
+      task.assignedWorkers.push(workerId);
+    }
+
+    await project.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Worker assigned to task successfully",
+      task,
+    });
+  } catch (error) {
+    console.error("Error in assignWorkerToTask:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to assign worker to task",
+      error: error.message,
+    });
+  }
+};
+
+
 
 
 
@@ -316,31 +399,72 @@ export const updateTaskStatus = async (req, res) => {
 };
 
 
+// POST /api/update-milestone-status
 export const updateMilestoneStatus = async (req, res) => {
   try {
     const { projectId, taskId, milestoneId, completed, completedAt } = req.body;
+
+    const project = await ProjectModel.findById(projectId);
+    if (!project) return res.status(404).json({ success: false, message: "Project not found" });
+
+    const task = project.tasks.id(taskId);
+    if (!task) return res.status(404).json({ success: false, message: "Task not found" });
+
+    const milestone = task.milestones.id(milestoneId);
+    if (!milestone) return res.status(404).json({ success: false, message: "Milestone not found" });
+
+    milestone.completed = completed;
+    milestone.completedAt = completed ? completedAt || new Date() : null;
+
+    // ✅ Check if all milestones are completed
+    const allCompleted = task.milestones.every((m) => m.completed);
+
+    if (allCompleted) {
+      task.completed = true;
+      // Set task completion time as the latest milestone completion
+      const latestMilestone = task.milestones.reduce((a, b) =>
+        new Date(a.completedAt) > new Date(b.completedAt) ? a : b
+      );
+      task.completedAt = latestMilestone.completedAt || new Date();
+    } else {
+      task.completed = false;
+      task.completedAt = null;
+    }
+
+    await project.save();
+
+    res.json({ success: true, updatedProject: project });
+  } catch (error) {
+    console.error("Error updating milestone:", error);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+
+// PUT /api/project/:projectId/task/:taskId/complete
+export const markTaskComplete = async (req, res) => {
+  const { projectId, taskId } = req.params;
+  const { completedAt } = req.body;
+
+  try {
     const project = await ProjectModel.findById(projectId);
     if (!project) return res.status(404).json({ message: "Project not found" });
 
     const task = project.tasks.id(taskId);
     if (!task) return res.status(404).json({ message: "Task not found" });
 
-    const milestone = task.milestones.id(milestoneId);
-    if (!milestone) return res.status(404).json({ message: "Milestone not found" });
-
-    milestone.completed = completed;
-
-    milestone.completedAt = completed ? (completedAt ? new Date(completedAt) : new Date()) : null;
-
-    // Automatically mark task complete if all milestones done
-    task.completed = task.milestones.every((m) => m.completed);
+    task.completedAt = completedAt ? new Date(completedAt) : new Date();
+    task.completed = true;
 
     await project.save();
-    res.json({ updatedProject: project });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
+
+    return res.status(200).json({ success: true, project });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: "Server error" });
   }
 };
+
 
 
 
@@ -394,3 +518,83 @@ export const deleteMilestone = async (req, res) => {
 };
 
 
+export const updateProjectProgress = async (req, res) => {
+  try {
+    const { projectId, progress } = req.body;
+
+    if (!projectId || progress === undefined) {
+      return res.status(400).json({ success: false, message: "Missing fields" });
+    }
+
+    const project = await ProjectModel.findById(projectId);
+    if (!project) {
+      return res.status(404).json({ success: false, message: "Project not found" });
+    }
+
+    // Convert progress safely
+    const numericProgress = Math.min(100, Math.max(0, Number(progress)));
+    project.progress = numericProgress;
+
+    // --- ✅ If project is completed ---
+    if (numericProgress === 100) {
+      project.projectStatus = "completed";
+
+      // Only increment once per project
+      if (!project.isCountedForCompletion && Array.isArray(project.assignedWorkers) && project.assignedWorkers.length > 0) {
+        const workerIds = project.assignedWorkers
+          .map((w) => (typeof w === "object" ? w.workerId || w.id || w._id : w))
+          .filter(Boolean)
+          .map((id) => new mongoose.Types.ObjectId(id));
+
+        const updateResult = await WorkerModel.updateMany(
+          { _id: { $in: workerIds } },
+          { $inc: { completedProjects: 1 } }
+        );
+
+        console.log("✅ Worker counters updated:", updateResult);
+        project.isCountedForCompletion = true;
+      }
+    } else {
+      // Revert project if progress < 100
+      project.projectStatus = "active";
+      project.isCountedForCompletion = false;
+      // ❌ Do NOT clear assignedWorkers here
+    }
+
+    await project.save();
+    res.json({ success: true, project });
+
+  } catch (error) {
+    console.error("❌ Error updating project progress:", error);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+export const updateClosingBudget = async (req, res) => {
+  try {
+    const { projectId, closingBudget } = req.body;
+
+    if (!projectId || closingBudget === undefined) {
+      return res.status(400).json({ success: false, message: "Missing fields" });
+    }
+
+    const project = await ProjectModel.findById(projectId);
+    if (!project) {
+      return res.status(404).json({ success: false, message: "Project not found" });
+    }
+
+    if (project.progress < 100) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Project must reach 100% to submit closing budget" });
+    }
+
+    project.closingBudget = closingBudget;
+    await project.save();
+
+    return res.json({ success: true, message: "Closing budget saved", project });
+  } catch (error) {
+    console.error("Error updating closing budget:", error);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};

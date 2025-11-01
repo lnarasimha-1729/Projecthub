@@ -11,6 +11,10 @@ import {
   updateTaskStatus,
   deleteTask,
   deleteMilestone,
+  markTaskComplete,
+  assignWorkerToTask,
+  updateProjectProgress,
+  updateClosingBudget
 } from "../controllers/ProjectController.js";
 import { upload } from "../middleware/update.js";
 import verifyToken from "../middleware/Auth.js";
@@ -40,25 +44,15 @@ router.post("/update-milestone", updateMilestoneStatus);
 router.post("/update-task-status", verifyToken, updateTaskStatus);
 router.post("/update-milestone-status", verifyToken, updateMilestoneStatus);
 router.post("/delete-task", deleteTask);
+router.put("/:projectId/task/:taskId/complete", markTaskComplete);
 router.post("/delete-milestone", deleteMilestone);
+router.post("/update-project-progress", updateProjectProgress);
 
 /* ------------------ Update Progress ------------------ */
 router.post("/update-progress", upload.array("files", 30), updateProgress);
+router.put("/:projectId/task/:taskId/assign", assignWorkerToTask);
+router.post("/update-closing-budget", updateClosingBudget);
 
-// Manual progress update (no file uploads)
-router.post("/update-progresses", async (req, res) => {
-  try {
-    const { id, progress } = req.body;
-    const project = await ProjectModel.findById(id);
-    if (!project) return res.status(404).json({ message: "Project not found" });
 
-    project.progress = progress;
-    await project.save();
-    res.json({ project });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Failed to update progress" });
-  }
-});
 
 export default router;

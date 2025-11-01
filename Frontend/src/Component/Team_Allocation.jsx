@@ -10,7 +10,7 @@ export default function Team_Allocation({projects}) {
 
   if (safeProjects.length === 0) {
     return (
-      <div className="w-1/2 mt-8 h-[430px] rounded-lg bg-white shadow-lg p-4 flex items-center justify-center text-gray-500">
+      <div className="w-1/2 mt-8 h-[410px] rounded-lg bg-white shadow-md p-4 flex items-center justify-center text-gray-500">
         No project data available
       </div>
     );
@@ -78,7 +78,7 @@ export default function Team_Allocation({projects}) {
   };
 
   return (
-    <div className="w-1/2 mt-8 h-[430px] rounded-lg bg-white shadow-lg p-4">
+    <div className="w-1/2 mt-0 h-[410px] rounded-lg bg-white shadow-md p-4">
       <Bar data={data} options={options} />
     </div>
   );
