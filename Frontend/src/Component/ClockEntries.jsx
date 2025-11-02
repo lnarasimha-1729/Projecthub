@@ -171,8 +171,8 @@ export default function ClockEntries() {
 
   const entriesForSelectedDay = selectedDate
     ? (clockEntries || []).filter(
-        (entry) => formatLocalYYYYMMDD(entry.time) === selectedDate
-      )
+      (entry) => formatLocalYYYYMMDD(entry.time) === selectedDate
+    )
     : (clockEntries || []);
 
   // Build table rows: pair clock-in with the next clock-out for same worker/project
@@ -383,54 +383,61 @@ export default function ClockEntries() {
                     {!isClockedIn ? (
                       <motion.button
                         onClick={() => {
-  if (window.confirm(`Clock in ${worker.Name}?`)) {
-  if (navigator.geolocation) {
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        const { latitude, longitude } = position.coords;
+                          if (window.confirm(`Clock in ${worker.Name}?`)) {
+                            if (navigator.geolocation) {
+                              navigator.geolocation.getCurrentPosition(
+                                async (position) => {
+                                  const latitude = position.coords.latitude.toFixed(8);
+                                  const longitude = position.coords.longitude.toFixed(8);
+                                  const accuracy = position.coords.accuracy; // in meters
 
-        console.log(latitude, longitude);
-        
+                                  console.log("📍 Exact location:", { latitude, longitude, accuracy });
 
-        // 1️⃣ Create clock entry in frontend
-        createClockEntry({
-          worker: worker.Name,
-          project: (projects && projects[0]?.projectName) || "N/A",
-          type: "clock-in",
-        });
+                                  // 1️⃣ Create clock entry in frontend
+                                  createClockEntry({
+                                    worker: worker.Name,
+                                    project: (projects && projects[0]?.projectName) || "N/A",
+                                    type: "clock-in",
+                                  });
 
-        // 2️⃣ Update worker model in backend with location
-        try {
-          await axios.post(`${backendUrl}/api/clock-in`, {
-            workerId : worker._id,
-            latitude,
-            longitude,
-          });
-          console.log("✅ Worker location stored successfully in DB");
-        } catch (err) {
-          console.error("❌ Error saving worker location:", err);
-        }
-      },
-      (error) => {
-        console.error("⚠️ Location access denied or unavailable:", error);
-        createClockEntry({
-          worker: worker.Name,
-          project: (projects && projects[0]?.projectName) || "N/A",
-          type: "clock-in",
-        });
-      }
-    );
-  } else {
-    alert("Geolocation not supported by this browser");
-    createClockEntry({
-      worker: worker.Name,
-      project: (projects && projects[0]?.projectName) || "N/A",
-      type: "clock-in",
-    });
-  }
-}
+                                  // 2️⃣ Send to backend
+                                  try {
+                                    const res = await axios.post(
+                                      `${backendUrl}/api/clock-in`,
+                                      {
+                                        workerId: worker._id,
+                                        latitude,
+                                        longitude,
+                                        accuracy,
+                                      },
+                                      {
+                                        headers: {
+                                          "Content-Type": "application/json",
+                                          Authorization: `Bearer ${token}`,
+                                        },
+                                      }
+                                    );
+                                    console.log("✅ Location stored:", res.data);
+                                  } catch (err) {
+                                    console.error("❌ Error saving worker location:", err);
+                                  }
+                                },
+                                (error) => {
+                                  console.error("⚠️ Geolocation error:", error);
+                                  alert("Could not get your location. Please enable GPS or location permission.");
+                                },
+                                {
+                                  enableHighAccuracy: true,
+                                  timeout: 10000, // 10s
+                                  maximumAge: 0, // always fresh reading
+                                }
+                              );
+                            } else {
+                              alert("Geolocation is not supported by this browser.");
+                            }
+                          }
+                        }}
 
-}}
 
                         className="px-3 py-1 rounded-xl font-semibold shadow bg-green-700 text-white hover:bg-green-800"
                       >

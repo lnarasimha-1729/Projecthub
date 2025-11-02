@@ -3,10 +3,14 @@ import { UsersContext } from "../Context/UserContext";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import {jwtDecode} from "jwt-decode";
+import axios from "axios";
 
 export default function Dashboard() {
-  const { projects, workers, clockEntries, fetchWorkers, fetchClockEntries, createClockEntry, syncClockEntries, token } =
+  const { projects, workers, clockEntries, fetchWorkers, fetchClockEntries, createClockEntry, syncClockEntries, token, backendUrl } =
     useContext(UsersContext);
+
+    console.log(workers);
+    
 
     const [email, setEmail] = useState("")
 
@@ -177,30 +181,72 @@ const userRole = useMemo(() => {
 
                 <div>
                   {!isClockedIn ? (
-                    <motion.button
-                      whileHover={{ scale: 1.05 }}
-                      onClick={() => {
-                        if (window.confirm(`Clock in ${worker.Name} for ${selectedProject}?`)) {
-                          createClockEntry({ worker: worker.Name, project: selectedProject, type: "clock-in" });
-                        }
-                      }}
-                      className="px-3 py-2 rounded font-semibold shadow bg-green-700 text-white hover:bg-blue-800"
-                    >
-                      Clock In
-                    </motion.button>
-                  ) : (
-                    <motion.button
-                      whileHover={{ scale: 1.05 }}
-                      onClick={() => {
-                        if (window.confirm(`Clock out ${worker.Name} from ${selectedProject}?`)) {
-                          createClockEntry({ worker: worker.Name, project: selectedProject, type: "clock-out" });
-                        }
-                      }}
-                      className="px-3 py-2 rounded font-semibold shadow bg-red-200 text-red-800 hover:bg-red-300"
-                    >
-                      Clock Out
-                    </motion.button>
-                  )}
+  <motion.button
+    whileHover={{ scale: 1.05 }}
+    onClick={() => {
+      if (window.confirm(`Clock in ${worker.Name} for ${selectedProject}?`)) {
+        if (navigator.geolocation) {
+          navigator.geolocation.getCurrentPosition(
+            async (position) => {
+              const latitude = position.coords.latitude.toFixed(8);
+          const longitude = position.coords.longitude.toFixed(8);
+          const accuracy = position.coords.accuracy; // in meters
+              createClockEntry({
+            worker: worker.Name,
+            project: (projects && projects[0]?.projectName) || "N/A",
+            type: "clock-in",
+          });
+
+          // 2️⃣ Send to backend
+          try {
+            const res = await axios.post(
+              `${backendUrl}/api/clock-in`,
+              {
+                workerId: worker._id,
+                latitude,
+                longitude,
+                accuracy,
+              },
+              {
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: `Bearer ${token}`,
+                },
+              }
+            );
+            console.log("✅ Location stored:", res.data);
+          } catch (err) {
+            console.error("❌ Error saving worker location:", err);
+          }
+            },
+            (error) => {
+              alert("Unable to get location. Please allow location access and try again.");
+              console.error("Location error:", error);
+            }
+          );
+        } else {
+          alert("Geolocation is not supported by this browser.");
+        }
+      }
+    }}
+    className="px-3 py-2 rounded font-semibold shadow bg-green-700 text-white hover:bg-blue-800"
+  >
+    Clock In
+  </motion.button>
+) : (
+  <motion.button
+    whileHover={{ scale: 1.05 }}
+    onClick={() => {
+      if (window.confirm(`Clock out ${worker.Name} from ${selectedProject}?`)) {
+        createClockEntry({ worker: worker.Name, project: selectedProject, type: "clock-out" });
+      }
+    }}
+    className="px-3 py-2 rounded font-semibold shadow bg-red-200 text-red-800 hover:bg-red-300"
+  >
+    Clock Out
+  </motion.button>
+)}
+
                 </div>
               </div>
             );

@@ -4,16 +4,20 @@ const workerSchema = new mongoose.Schema(
   {
     Name: { type: String, required: true },
     Role: { type: String, required: true },
-    workerType : {type : String, required: true},
-    completedProjects : {type : Number, default : 0},
+    workerType: { type: String, required: true },
+    completedProjects: { type: Number, default: 0 },
     totalHoursWorked: { type: Number, default: 0 },
     clockInTime: Date,
-  clockOutTime: Date,
-  isClockedIn: { type: Boolean, default: false },
-  location: {
-    latitude: Number,
-    longitude: Number,
-  },
+    clockOutTime: Date,
+    isClockedIn: { type: Boolean, default: false },
+    location: {
+      latitude: { type: Number },
+      longitude: { type: Number },
+      accuracy: { type: Number }, // meters
+      updatedAt: { type: Date },
+    },
+
+    address: { type: String }
 
   },
   {

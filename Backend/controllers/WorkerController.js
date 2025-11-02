@@ -87,14 +87,10 @@ export const updateWorkerLocation = async (req, res) => {
 
 export const clockInWorker = async (req, res) => {
   try {
-    const { workerId, latitude, longitude } = req.body;
+    const { workerId, latitude, longitude, accuracy } = req.body;
 
-    console.log(req.body);
-    
-
-    // validate input
     if (!workerId || !latitude || !longitude) {
-      return res.status(400).json({ success: false, message: "Missing data" });
+      return res.status(400).json({ success: false, message: "Missing coordinates or workerId" });
     }
 
     const worker = await Worker.findById(workerId);
@@ -102,20 +98,22 @@ export const clockInWorker = async (req, res) => {
       return res.status(404).json({ success: false, message: "Worker not found" });
     }
 
-    // ✅ store lat/long in DB
-    worker.clockInTime = new Date();
-    worker.isClockedIn = true;
-    worker.location = { latitude, longitude };
+    worker.location = {
+      latitude: parseFloat(latitude),
+      longitude: parseFloat(longitude),
+      accuracy: parseFloat(accuracy),
+      updatedAt: new Date(),
+    };
 
     await worker.save();
 
     res.status(200).json({
       success: true,
-      message: "Clock-in successful",
-      worker,
+      message: "Worker location stored successfully",
+      location: worker.location,
     });
-  } catch (error) {
-    console.error("Error during clock-in:", error);
+  } catch (err) {
+    console.error("❌ Error storing worker location:", err);
     res.status(500).json({ success: false, message: "Server error" });
   }
 };

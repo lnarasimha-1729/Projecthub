@@ -121,9 +121,18 @@ const SearchBar = () => {
   }, [profile]);
 
   const userName = useMemo(() => {
-      const decoded = jwtDecode(localStorage.getItem("token"))
-      return decoded.name;
-    }, [token]);
+    const token = localStorage.getItem("token");
+    if (!token || typeof token !== "string") return "Guest";
+
+    try {
+      const decoded = jwtDecode(token);
+      return decoded?.name || "User";
+    } catch (err) {
+      console.error("❌ Invalid token:", err);
+      return "Guest";
+    }
+  }, [token]);
+
 
   return (
     <div className="py-6 bg-gray-50">

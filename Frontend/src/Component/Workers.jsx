@@ -18,55 +18,55 @@ export default function Workers() {
   const [formData, setFormData] = useState({ Name: "", Role: "", workerType: "" });
 
   function getLastProfileImage(user) {
-  if (!user || !user.image) return null;
+    if (!user || !user.image) return null;
 
-  let img = null;
+    let img = null;
 
-  // 🧠 Case 1: image is an array (take last or most recent)
-  if (Array.isArray(user.image) && user.image.length > 0) {
-    // if image objects have a date or timestamp, sort them by time
-    if (typeof user.image[0] === "object" && user.image[0]?.uploadedAt) {
-      const sorted = [...user.image].sort(
-        (a, b) => new Date(b.uploadedAt) - new Date(a.uploadedAt)
-      );
-      img = sorted[0];
-    } else {
-      // otherwise, just take the last element
-      img = user.image[user.image.length - 1];
+    // 🧠 Case 1: image is an array (take last or most recent)
+    if (Array.isArray(user.image) && user.image.length > 0) {
+      // if image objects have a date or timestamp, sort them by time
+      if (typeof user.image[0] === "object" && user.image[0]?.uploadedAt) {
+        const sorted = [...user.image].sort(
+          (a, b) => new Date(b.uploadedAt) - new Date(a.uploadedAt)
+        );
+        img = sorted[0];
+      } else {
+        // otherwise, just take the last element
+        img = user.image[user.image.length - 1];
+      }
+    } else if (typeof user.image === "string") {
+      // 🧠 Case 2: image is a single string (URL or base64)
+      img = user.image;
     }
-  } else if (typeof user.image === "string") {
-    // 🧠 Case 2: image is a single string (URL or base64)
-    img = user.image;
+
+    // 🧠 Case 3: image is object containing base64 or buffer data
+    if (img && typeof img === "object") {
+      if (img.data && typeof img.data === "string") {
+        return img.data.startsWith("data:")
+          ? img.data
+          : `data:${img.mimetype || "image/png"};base64,${img.data}`;
+      }
+
+      // handle cases where you have direct base64 in "img" itself
+      if (img.base64) {
+        return `data:image/png;base64,${img.base64}`;
+      }
+
+      // if it’s just a URL inside object
+      if (img.url) {
+        return img.url;
+      }
+    }
+
+    // 🧠 Case 4: direct base64 or URL string
+    if (typeof img === "string") {
+      if (img.startsWith("http") || img.startsWith("data:")) return img;
+      if (/^[A-Za-z0-9+/=]+$/.test(img) && img.length > 100)
+        return `data:image/png;base64,${img}`;
+    }
+
+    return null;
   }
-
-  // 🧠 Case 3: image is object containing base64 or buffer data
-  if (img && typeof img === "object") {
-    if (img.data && typeof img.data === "string") {
-      return img.data.startsWith("data:")
-        ? img.data
-        : `data:${img.mimetype || "image/png"};base64,${img.data}`;
-    }
-
-    // handle cases where you have direct base64 in "img" itself
-    if (img.base64) {
-      return `data:image/png;base64,${img.base64}`;
-    }
-
-    // if it’s just a URL inside object
-    if (img.url) {
-      return img.url;
-    }
-  }
-
-  // 🧠 Case 4: direct base64 or URL string
-  if (typeof img === "string") {
-    if (img.startsWith("http") || img.startsWith("data:")) return img;
-    if (/^[A-Za-z0-9+/=]+$/.test(img) && img.length > 100)
-      return `data:image/png;base64,${img}`;
-  }
-
-  return null;
-}
 
   useEffect(() => {
     const t = localStorage.getItem("token");
@@ -81,13 +81,13 @@ export default function Workers() {
   }, []);
 
   // include both Workers and Supervisors (handles different field names/casing)
-const staffList = useMemo(() => {
-  return (workers || []).filter((w) => {
-    const t = String(w.workerType || w.Role || w.role || "").toLowerCase().trim();
-    // match exact or contains (covers "Worker", "worker", "Supervisor", "supervisor", "worker-lead", etc.)
-    return t === "worker" || t === "supervisor" || t.includes("worker") || t.includes("supervisor");
-  });
-}, [workers]);
+  const staffList = useMemo(() => {
+    return (workers || []).filter((w) => {
+      const t = String(w.workerType || w.Role || w.role || "").toLowerCase().trim();
+      // match exact or contains (covers "Worker", "worker", "Supervisor", "supervisor", "worker-lead", etc.)
+      return t === "worker" || t === "supervisor" || t.includes("worker") || t.includes("supervisor");
+    });
+  }, [workers]);
 
 
   /* -----------------------------------------
@@ -189,50 +189,50 @@ const staffList = useMemo(() => {
   };
 
   const enrichedWorkers = useMemo(
-  () =>
-    (staffList || []).map((w) => {
-      const stats = getStatsForWorker(w);
-      return {
-        ...w,
-        totalHoursWorked: stats?.totalHours ?? 0,
-        topProjects: stats?.topProjects ?? [],
-      };
-    }),
-  [staffList, workerStatsMap]
-);
+    () =>
+      (staffList || []).map((w) => {
+        const stats = getStatsForWorker(w);
+        return {
+          ...w,
+          totalHoursWorked: stats?.totalHours ?? 0,
+          topProjects: stats?.topProjects ?? [],
+        };
+      }),
+    [staffList, workerStatsMap]
+  );
 
-  
-  
+
+
 
   const workersWithImages = useMemo(() => {
-  if (!Array.isArray(enrichedWorkers) || !Array.isArray(users)) return enrichedWorkers;
+    if (!Array.isArray(enrichedWorkers) || !Array.isArray(users)) return enrichedWorkers;
 
-  return enrichedWorkers.map(worker => {
-    // Normalize worker identifiers
-    const workerEmail = (worker.email || worker.Email || "").toLowerCase();
-    const workerName = (worker.name || worker.Name || "").toLowerCase();
+    return enrichedWorkers.map(worker => {
+      // Normalize worker identifiers
+      const workerEmail = (worker.email || worker.Email || "").toLowerCase();
+      const workerName = (worker.name || worker.Name || "").toLowerCase();
 
-    // 1️⃣ Try exact email match
-    let matchedUser = users.find(u => (u.email || "").toLowerCase() === workerEmail);
+      // 1️⃣ Try exact email match
+      let matchedUser = users.find(u => (u.email || "").toLowerCase() === workerEmail);
 
-    // 2️⃣ If email mismatch, try by normalized name
-    if (!matchedUser) {
-      matchedUser = users.find(u => (u.name || "").toLowerCase() === workerName);
-    }
+      // 2️⃣ If email mismatch, try by normalized name
+      if (!matchedUser) {
+        matchedUser = users.find(u => (u.name || "").toLowerCase() === workerName);
+      }
 
-    // 3️⃣ If still no match, try email username part (before @)
-    if (!matchedUser && workerName) {
-      matchedUser = users.find(u =>
-        (u.email?.split("@")[0].split(".")[0] || "").toLowerCase() === workerName
-      );
-    }
+      // 3️⃣ If still no match, try email username part (before @)
+      if (!matchedUser && workerName) {
+        matchedUser = users.find(u =>
+          (u.email?.split("@")[0].split(".")[0] || "").toLowerCase() === workerName
+        );
+      }
 
-    // 4️⃣ Get the user’s last profile image safely
-    const image = getLastProfileImage(matchedUser);
+      // 4️⃣ Get the user’s last profile image safely
+      const image = getLastProfileImage(matchedUser);
 
-    return { ...worker, profileImage: image };
-  });
-}, [enrichedWorkers, users]);
+      return { ...worker, profileImage: image };
+    });
+  }, [enrichedWorkers, users]);
 
 
 
@@ -275,20 +275,20 @@ const staffList = useMemo(() => {
   }, [sortedByCompleted]);
 
   // Top performer (with image)
-const topPerformer = useMemo(() => {
-  if (!workersWithImages.length) return null;
+  const topPerformer = useMemo(() => {
+    if (!workersWithImages.length) return null;
 
-  const sorted = [...workersWithImages].sort(
-    (a, b) => Number(b.completedProjects || 0) - Number(a.completedProjects || 0)
-  );
+    const sorted = [...workersWithImages].sort(
+      (a, b) => Number(b.completedProjects || 0) - Number(a.completedProjects || 0)
+    );
 
-  // Only return if top performer has completed > 0 projects
-  if (sorted[0] && Number(sorted[0].completedProjects) > 0) {
-    return sorted[0];
-  }
+    // Only return if top performer has completed > 0 projects
+    if (sorted[0] && Number(sorted[0].completedProjects) > 0) {
+      return sorted[0];
+    }
 
-  return null; // No performer with completed projects
-}, [workersWithImages]);
+    return null; // No performer with completed projects
+  }, [workersWithImages]);
 
 
   // Team stats
@@ -304,17 +304,17 @@ const topPerformer = useMemo(() => {
     });
     return busy.size;
   }, [projects]);
-  
+
 
   // before: const available = Math.max((workersList?.length || 0) - onProject, 0);
-const available = Math.max((staffList?.length || 0) - onProject, 0);
+  const available = Math.max((staffList?.length || 0) - onProject, 0);
 
-// before: { title: "Total Workers", value: workersList.length, ...}
-const teamStats = [
-  { title: "Total Members", value: staffList.length, icon: "https://img.icons8.com/wired/64/workers-male.png" },
-  { title: "Available", value: available, icon: "https://img.icons8.com/wired/64/workers-male.png" },
-  { title: "On Projects", value: onProject, icon: "https://img.icons8.com/ios/50/document--v1.png" },
-];
+  // before: { title: "Total Workers", value: workersList.length, ...}
+  const teamStats = [
+    { title: "Total Members", value: staffList.length, icon: "https://img.icons8.com/wired/64/workers-male.png" },
+    { title: "Available", value: available, icon: "https://img.icons8.com/wired/64/workers-male.png" },
+    { title: "On Projects", value: onProject, icon: "https://img.icons8.com/ios/50/document--v1.png" },
+  ];
 
 
   // handlers for modal form
@@ -346,7 +346,7 @@ const teamStats = [
       setLoading(false);
     }
   };
-  
+
 
   // small UI helper to render top projects chips
   const renderTopProjectsChips = (topProjects = []) => {
@@ -386,121 +386,121 @@ const teamStats = [
       </div>
 
       {/* View All Workers Modal — Table Layout (sorted by projects completed desc) */}
-{showAllModal && (
-  <motion.div
-    initial={{ opacity: 0, scale: 0.98 }}
-    animate={{ opacity: 1, scale: 1 }}
-    exit={{ opacity: 0, scale: 0.98 }}
-    transition={{ duration: 0.18 }}
-    className="fixed inset-0 flex items-center justify-center bg-black/60 z-50 p-4"
-  >
-    <div className="bg-white rounded-2xl p-4 w-full max-w-6xl shadow-xl overflow-hidden w-50">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-2xl font-bold text-gray-800">All Workers</h2>
-        <button
-          onClick={() => setShowAllModal(false)}
-          className="text-gray-600 hover:text-gray-800 text-lg"
+      {showAllModal && (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.98 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 0.98 }}
+          transition={{ duration: 0.18 }}
+          className="fixed inset-0 flex items-center justify-center bg-black/60 z-50 p-4"
         >
-          ✕
-        </button>
-      </div>
+          <div className="bg-white rounded-2xl p-4 w-full max-w-6xl shadow-xl overflow-hidden w-50">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-2xl font-bold text-gray-800">All Workers</h2>
+              <button
+                onClick={() => setShowAllModal(false)}
+                className="text-gray-600 hover:text-gray-800 text-lg"
+              >
+                ✕
+              </button>
+            </div>
 
-      {(() => {
-        // build filtered worker list (only role = worker)
-        const onlyWorkers = (workersWithImages || [])
-          .filter((w) => {
-            const roleField = (w.workerType || w.Role || w.role || "").toString().toLowerCase();
-            return roleField === "worker";
-          })
-          // compute stats, 
-          // totalHours and totalProjects
-          .map((w) => {
-            const stats = getStatsForWorker(w) || {};
-            const totalHours = stats.totalHours ?? w.totalHoursWorked ?? 0;
-            const completedFromField = Number(w.completedProjects ?? w.totalProjects ?? 0);
-            const projectsCountFromStats = stats.projects ? Object.keys(stats.projects).length : 0;
-            const projectsCountFromTop = stats.topProjects ? stats.topProjects.length : 0;
-            const totalProjects = completedFromField || projectsCountFromStats || projectsCountFromTop || 0;
-            return { ...w, stats, totalHours, totalProjects: Number(totalProjects) };
-          })
-          // sort by totalProjects desc, tie-breaker by totalHours desc
-          .sort((a, b) => {
-            if (b.totalProjects !== a.totalProjects) return b.totalProjects - a.totalProjects;
-            return (b.totalHours || 0) - (a.totalHours || 0);
-          });
+            {(() => {
+              // build filtered worker list (only role = worker)
+              const onlyWorkers = (workersWithImages || [])
+                .filter((w) => {
+                  const roleField = (w.workerType || w.Role || w.role || "").toString().toLowerCase();
+                  return roleField === "worker";
+                })
+                // compute stats, 
+                // totalHours and totalProjects
+                .map((w) => {
+                  const stats = getStatsForWorker(w) || {};
+                  const totalHours = stats.totalHours ?? w.totalHoursWorked ?? 0;
+                  const completedFromField = Number(w.completedProjects ?? w.totalProjects ?? 0);
+                  const projectsCountFromStats = stats.projects ? Object.keys(stats.projects).length : 0;
+                  const projectsCountFromTop = stats.topProjects ? stats.topProjects.length : 0;
+                  const totalProjects = completedFromField || projectsCountFromStats || projectsCountFromTop || 0;
+                  return { ...w, stats, totalHours, totalProjects: Number(totalProjects) };
+                })
+                // sort by totalProjects desc, tie-breaker by totalHours desc
+                .sort((a, b) => {
+                  if (b.totalProjects !== a.totalProjects) return b.totalProjects - a.totalProjects;
+                  return (b.totalHours || 0) - (a.totalHours || 0);
+                });
 
-        if (!onlyWorkers.length) {
-          return <div className="py-12 text-center text-gray-500 italic">No worker data available.</div>;
-        }
+              if (!onlyWorkers.length) {
+                return <div className="py-12 text-center text-gray-500 italic">No worker data available.</div>;
+              }
 
-        return (
-          <div className="overflow-x-auto">
-            <table className="min-w-full table-auto divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">#</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Image</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Name</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Role</th>
-                  <th className="px-4 py-3 text-right text-sm font-medium text-gray-700">Hours Worked</th>
-                  <th className="px-4 py-3 text-right text-sm font-medium text-gray-700">Total Projects</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-100">
-                {onlyWorkers.map((w, i) => (
-                  <tr key={w._id || i} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">{i + 1}</td>
+              return (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full table-auto divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">#</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Image</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Name</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Role</th>
+                        <th className="px-4 py-3 text-right text-sm font-medium text-gray-700">Hours Worked</th>
+                        <th className="px-4 py-3 text-right text-sm font-medium text-gray-700">Total Projects</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-100">
+                      {onlyWorkers.map((w, i) => (
+                        <tr key={w._id || i} className="hover:bg-gray-50">
+                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">{i + 1}</td>
 
-                    {/* Image */}
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      <div className="w-12 h-12 rounded-full overflow-hidden bg-gray-100 flex items-center justify-center">
-                        {w.profileImage ? (
-                          <img
-                            src={w.profileImage}
-                            alt={w.Name}
-                            className="w-full h-full object-cover"
-                            onError={(e) =>
-                              (e.target.src = "https://cdn-icons-png.flaticon.com/512/149/149071.png")
-                            }
-                          />
-                        ) : (
-                          <div className="text-gray-600 font-medium">{w.Name?.[0] || "?"}</div>
-                        )}
-                      </div>
-                    </td>
+                          {/* Image */}
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            <div className="w-12 h-12 rounded-full overflow-hidden bg-gray-100 flex items-center justify-center">
+                              {w.profileImage ? (
+                                <img
+                                  src={w.profileImage}
+                                  alt={w.Name}
+                                  className="w-full h-full object-cover"
+                                  onError={(e) =>
+                                    (e.target.src = "https://cdn-icons-png.flaticon.com/512/149/149071.png")
+                                  }
+                                />
+                              ) : (
+                                <div className="text-gray-600 font-medium">{w.Name?.[0] || "?"}</div>
+                              )}
+                            </div>
+                          </td>
 
-                    {/* Name */}
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      <div className="text-sm font-semibold text-gray-900">{w.Name}</div>
-                      <div className="text-xs text-gray-500 mt-0.5">{w.email || w.Email || ""}</div>
-                    </td>
+                          {/* Name */}
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            <div className="text-sm font-semibold text-gray-900">{w.Name}</div>
+                            <div className="text-xs text-gray-500 mt-0.5">{w.email || w.Email || ""}</div>
+                          </td>
 
-                    {/* Role */}
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{w.Role || w.workerType || "-"}</td>
+                          {/* Role */}
+                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{w.Role || w.workerType || "-"}</td>
 
-                    {/* Hours Worked */}
-                    <td>
-                    {role === "worker" ? (
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-indigo-600 font-medium">
-                      {Number(w.totalHours).toFixed ? Number(w.totalHours).toFixed(2) : Number(w.totalHours)} hrs
-                    </td>
-                    ):("")}
-                    </td>
+                          {/* Hours Worked */}
+                          <td>
+                            {role === "worker" ? (
+                              <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-indigo-600 font-medium">
+                                {Number(w.totalHours).toFixed ? Number(w.totalHours).toFixed(2) : Number(w.totalHours)} hrs
+                              </td>
+                            ) : ("")}
+                          </td>
 
-                    {/* Total Projects */}
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-800 font-semibold">
-                      {w.totalProjects ?? 0}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                          {/* Total Projects */}
+                          <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-800 font-semibold">
+                            {w.totalProjects ?? 0}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              );
+            })()}
           </div>
-        );
-      })()}
-    </div>
-  </motion.div>
-)}
+        </motion.div>
+      )}
 
 
 
@@ -529,51 +529,51 @@ const teamStats = [
       {topPerformer && (
         <div className="mt-10">
           <div className="flex justify-between">
-          <p className="text-3xl font-extrabold mb-6 text-gray-700">🏆 Top Performer</p>
-          <button
-  onClick={() => setShowAllModal(true)}
-  className="text-indigo-600 font-semibold hover:underline"
->
-  View All
-</button>
+            <p className="text-3xl font-extrabold mb-6 text-gray-700">🏆 Top Performer</p>
+            <button
+              onClick={() => setShowAllModal(true)}
+              className="text-indigo-600 font-semibold hover:underline"
+            >
+              View All
+            </button>
 
           </div>
 
           <motion.div className="bg-white rounded-3xl p-6 shadow-sm flex flex-col sm:flex-row sm:items-center gap-5">
             {/* Avatar */}
-<div className="flex-shrink-0">
-  <div className="w-28 h-28 rounded-full overflow-hidden shadow-xl ring-4 ring-yellow-400 flex items-center justify-center bg-gradient-to-r from-indigo-500 to-purple-500">
-    {topPerformer.profileImage ? (
-      <img
-        src={topPerformer.profileImage}
-        alt={topPerformer.Name}
-        className="w-full h-full object-cover"
-      />
-    ) : (
-      <div className="text-white font-bold text-3xl">
-        {topPerformer.Name?.[0]?.toUpperCase() || "?"}
-      </div>
-    )}
-  </div>
-</div>
+            <div className="flex-shrink-0">
+              <div className="w-28 h-28 rounded-full overflow-hidden shadow-xl ring-4 ring-yellow-400 flex items-center justify-center bg-gradient-to-r from-indigo-500 to-purple-500">
+                {topPerformer.profileImage ? (
+                  <img
+                    src={topPerformer.profileImage}
+                    alt={topPerformer.Name}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="text-white font-bold text-3xl">
+                    {topPerformer.Name?.[0]?.toUpperCase() || "?"}
+                  </div>
+                )}
+              </div>
+            </div>
 
 
 
             {/* Info */}
             <div className="flex-1">
               <div className="flex justify-between">
-              <div>
-              <div className="font-bold text-xl text-gray-900">{topPerformer.Name}</div>
-              <div className="text-gray-700">{topPerformer.Role}</div>
-              </div>
-              <div className="mt-1 text-sm text-gray-500">Rank: #{ranksMap[String(topPerformer._id)]}</div>
+                <div>
+                  <div className="font-bold text-xl text-gray-900">{topPerformer.Name}</div>
+                  <div className="text-gray-700">{topPerformer.Role}</div>
+                </div>
+                <div className="mt-1 text-sm text-gray-500">Rank: #{ranksMap[String(topPerformer._id)]}</div>
               </div>
 
               <div className="text-yellow-500 font-semibold mt-1">
                 {Number(topPerformer.completedProjects || 0)} Completed Projects
               </div>
 
-              
+
 
               {/* Hours Worked */}
               <div className="mt-2 text-indigo-600 font-medium">
@@ -675,9 +675,9 @@ const teamStats = [
 /* Section Component */
 function Section({ title, workers = [], projects = [], type, topPerformer, ranksMap = {}, workerStatsMap = {}, getStatsForWorker = () => null }) {
   const filtered = (workers || []).filter((w) => {
-  const roleField = (w.workerType || w.Role || w.role || "").toString().toLowerCase();
-  return roleField === type.toLowerCase();
-});
+    const roleField = (w.workerType || w.Role || w.role || "").toString().toLowerCase();
+    return roleField === type.toLowerCase();
+  });
 
 
   // small UI helper for a worker's top projects
@@ -701,7 +701,7 @@ function Section({ title, workers = [], projects = [], type, topPerformer, ranks
           const assignedProjects = projects.filter((proj) =>
             type === "Supervisor"
               ? Array.isArray(proj.supervisors) &&
-                proj.supervisors.some((sup) => sup?.trim().toLowerCase() === worker.Name?.trim().toLowerCase())
+              proj.supervisors.some((sup) => sup?.trim().toLowerCase() === worker.Name?.trim().toLowerCase())
               : proj.assignedWorkers?.some((aw) => String((aw.workerId && (aw.workerId._id || aw.workerId)) || aw) === workerIdStr)
           );
           const isBusy = assignedProjects.length > 0;
@@ -718,28 +718,28 @@ function Section({ title, workers = [], projects = [], type, topPerformer, ranks
 
               <div className="flex items-center gap-4 mb-3">
                 <div
-  className={`w-14 h-14 rounded-full overflow-hidden flex items-center justify-center shadow-lg ${isBusy ? "ring-2 ring-red-500" : "ring-2 ring-green-400"}`}
->
-  {worker.profileImage ? (
-    <img
-      src={worker.profileImage}
-      alt={worker.Name}
-      className="w-full h-full object-cover"
-    />
-  ) : (
-    <div
-      className="w-full h-full flex items-center justify-center text-white font-bold text-xl"
-      style={{ background: "linear-gradient(135deg,#22C55E,#8b5cf6)" }}
-    >
-      {worker.Name?.[0]?.toUpperCase() || "?"}
-    </div>
-  )}
-</div>
+                  className={`w-14 h-14 rounded-full overflow-hidden flex items-center justify-center shadow-lg ${isBusy ? "ring-2 ring-red-500" : "ring-2 ring-green-400"}`}
+                >
+                  {worker.profileImage ? (
+                    <img
+                      src={worker.profileImage}
+                      alt={worker.Name}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div
+                      className="w-full h-full flex items-center justify-center text-white font-bold text-xl"
+                      style={{ background: "linear-gradient(135deg,#22C55E,#8b5cf6)" }}
+                    >
+                      {worker.Name?.[0]?.toUpperCase() || "?"}
+                    </div>
+                  )}
+                </div>
 
                 <div className="flex-1">
                   <div className="font-bold text-gray-900">{worker.Name}</div>
                   <div className="text-gray-700">{worker.Role}</div>
-                  <WorkerCard key={worker._id} worker = {worker}/>
+                  <WorkerCard key={worker._id} worker={worker} />
 
                   {/* <div className="text-sm text-gray-500 mt-1">Hours: <span className="font-semibold text-gray-800">{stats?.totalHours ?? worker.totalHoursWorked ?? 0}h</span></div> */}
                 </div>
