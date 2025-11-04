@@ -1,18 +1,18 @@
+// models/ProjectProgress.js
 import mongoose from "mongoose";
 
+const EntrySchema = new mongoose.Schema({
+  date: { type: Date, required: true },
+  progress: { type: Number, required: true, min: 0, max: 100 }
+}, { _id: false });
+
 const ProjectProgressSchema = new mongoose.Schema({
-  projectId: { type: mongoose.Schema.Types.ObjectId, required: true, index: true },
-  // Parallel arrays — same length; date strings stored as "YYYY-MM-DD"
-  dates: [{ type: String, required: true }],       // e.g. "2025-11-11"
-  progresses: [{ type: Number, required: true }],  // e.g. 10, 70
-  notes: [{ type: String, default: "" }],
-  createdAt: { type: Date, default: Date.now },
-  updatedAt: { type: Date, default: Date.now },
-});
+  projectId: { type: mongoose.Schema.Types.ObjectId, required: true, index: true, unique: true },
+  projectName: String,
+  entries: { type: [EntrySchema], default: [] }
+}, { timestamps: true });
 
-ProjectProgressSchema.pre("save", function (next) {
-  this.updatedAt = Date.now();
-  next();
-});
+// Optional: index to prevent duplicate date entries per project using a partial unique index
+// Mongo db-level uniqueness on array elements isn't trivial; we'll enforce at app level.
 
-export default mongoose.model("ProjectProgress", ProjectProgressSchema);
+export default module.exports = mongoose.model("ProjectProgress", ProjectProgressSchema);

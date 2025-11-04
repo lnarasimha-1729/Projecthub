@@ -15,6 +15,8 @@ import UserContextProvider from "./Context/UserContext";
 import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import Profile from "./Component/Profile";
+import Forgot from "./Component/Forgot";
+import PasswordChanged from "./Component/PasswordChanged";
 
 // ✅ Layout wrapper
 const Layout = ({ children }) => {
@@ -45,7 +47,7 @@ const App = () => {
 
   const isLoginPage = location.pathname === "/login";
 
-  const isProfilePage = location.pathname === "/profile"
+  const isForgot = location.pathname === "/forgot"
 
   return (
     <UserContextProvider>
@@ -53,6 +55,10 @@ const App = () => {
         // Show login page without sidebar/searchbar
         <Routes>
           <Route path="/login" element={<Login />} />
+        </Routes>
+      ) :  isForgot ? ( 
+        <Routes>
+          <Route path="/forgot" element={<Forgot/>}/>
         </Routes>
       ) : (
         // Wrap all other pages with layout
@@ -68,6 +74,7 @@ const App = () => {
             <Route path="/reports" element={<Reports />} />
             <Route path="/chatbot" element={<Chatbot />} />
             <Route path="/calendar" element={<Calendar />} />
+            <Route path="/password-changed" element={<PasswordChanged />} />
           </Routes>
         </Layout>
       )}

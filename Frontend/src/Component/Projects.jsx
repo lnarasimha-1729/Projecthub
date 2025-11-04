@@ -215,7 +215,7 @@ const Projects = () => {
 
       [...progressImages, ...progressPdfs].forEach((file) => data.append("files", file));
       await updateProgress(id, data);
-      toast.success("✅ Progress & files uploaded successfully!");
+      toast.success("✅ files uploaded successfully!");
       setProgressModal({ open: false, project: null });
       setProgressImages([]);
       setProgressPdfs([]);

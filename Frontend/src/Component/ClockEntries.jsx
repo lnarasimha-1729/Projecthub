@@ -270,7 +270,7 @@ export default function ClockEntries() {
 
         <div className="flex items-center gap-3 flex-wrap mt-4 sm:mt-0">
           <select className="border border-gray-300 rounded-lg px-3 py-2 shadow-sm bg-white">
-            {(projects || []).map((proj, i) => (
+            {(projects || []).filter((item)=>item.projectStatus === "active").map((proj, i) => (
               <option key={i} value={proj.projectName}>
                 {proj.projectName}
               </option>
@@ -280,12 +280,12 @@ export default function ClockEntries() {
           {showSyncPrompt ? (
             <motion.button
               onClick={syncClockEntries}
-              className="px-4 py-2 rounded-xl bg-blue-500 text-white shadow hover:bg-blue-600 transition"
+              className="px-4 py-2 rounded-lg bg-blue-500 text-white shadow hover:bg-blue-600 transition"
             >
               Sync
             </motion.button>
           ) : (
-            <span className={`px-4 py-2 rounded-xl text-white ${isOnline ? "bg-green-500" : "bg-red-500"}`}>
+            <span className={`px-4 py-2 rounded-lg text-white ${isOnline ? "bg-green-500" : "bg-red-500"}`}>
               {isOnline ? "Online" : "Offline"}
             </span>
           )}
@@ -338,9 +338,9 @@ export default function ClockEntries() {
       </div>
 
       {/* Worker Actions & Recent Entries */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-2">
         {/* Left column: actions & calendar */}
-        <div className="bg-white/70 backdrop-blur-md border border-gray-200 rounded-3xl shadow-lg p-6 lg:col-span-1">
+        <div className="bg-white/70 backdrop-blur-md border border-gray-200 rounded-2xl shadow-lg p-6 lg:col-span-1">
           <div className="flex items-center justify-between mb-4 border-b-2 border-gray-200 pb-2">
             <p className="text-xl font-bold text-gray-800">Worker Actions</p>
           </div>
@@ -439,7 +439,7 @@ export default function ClockEntries() {
                         }}
 
 
-                        className="px-3 py-1 rounded-xl font-semibold shadow bg-green-700 text-white hover:bg-green-800"
+                        className="px-3 py-1 rounded font-semibold shadow bg-green-700 text-white hover:bg-green-800"
                       >
                         Clock In
                       </motion.button>
@@ -454,7 +454,7 @@ export default function ClockEntries() {
                             });
                           }
                         }}
-                        className="px-3 py-1 rounded-xl font-semibold shadow bg-red-200 text-red-800 hover:bg-red-300"
+                        className="px-3 py-1 rounded font-semibold shadow bg-red-200 text-red-800 hover:bg-red-300"
                       >
                         Clock Out
                       </motion.button>
@@ -479,7 +479,7 @@ export default function ClockEntries() {
         </div>
 
         {/* Right column: recent entries */}
-        <div className="bg-white/70 backdrop-blur-md border border-gray-200 rounded-3xl shadow-md p-6 lg:col-span-2 overflow-auto max-h-[600px] -ml-4">
+        <div className="bg-white/70 backdrop-blur-md border border-gray-200 rounded-2xl shadow-md p-6 lg:col-span-2 overflow-auto max-h-[600px]">
           <div className="flex items-center justify-between mb-4">
             <p className="text-xl font-bold text-gray-800">Recent Entries</p>
             <div className="text-sm text-gray-600">Filter: {selectedLabel}</div>
@@ -521,13 +521,13 @@ export default function ClockEntries() {
 /* -------------------- Stat Card -------------------- */
 function StatCard({ icon, title, value, gradient }) {
   return (
-    <motion.div className={`flex items-center px-4 py-2 rounded-3xl shadow-md bg-white/70 backdrop-blur-md border border-gray-200`}>
+    <motion.div className={`flex items-center px-4 py-1 rounded-2xl shadow-md bg-white/70 backdrop-blur-md border border-gray-200`}>
       <div className={`w-12 h-12 flex items-center justify-center rounded-full bg-gradient-to-br ${gradient} text-white text-xl shadow-md mr-4`}>
         <img src={icon} alt={title} className="w-6 h-6" />
       </div>
       <div className="flex flex-col">
         <p className="text-gray-600 font-medium">{title}</p>
-        <p className="text-2xl font-bold text-gray-800">{value}</p>
+        <p className="text-lg font-bold text-gray-800">{value}</p>
       </div>
     </motion.div>
   );

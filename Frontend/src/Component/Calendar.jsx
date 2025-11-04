@@ -1,58 +1,32 @@
-import React, { useState, useEffect, useContext, useMemo } from "react";
+// components/Calendar.jsx
+import React, { useContext, useEffect, useState, useMemo } from "react";
 import { UsersContext } from "../Context/UserContext";
 import axios from "axios";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
 /**
- * Calendar component with per-day per-project progress saving.
- * 
- * - Auto-triggers backend daily progress save on mount
- * - Allows manual "Run Auto-Save" for testing
- * - Fetches per-day project progress data
- * - Falls back to localStorage if backend is missing/unavailable
+ * Calendar that stores daily progress per active project.
+ *
+ * Behaviour & backend contract (assumptions):
+ * - On save: sends one POST per active project to:
+ *     POST `${backendUrl}/api/project-progress/daily`
+ *   with body: { projectId, date: ISOString, progress }
+ * - The backend is expected to create (or upsert) one document per project and
+ *   store dates/progress (i.e. "two sets" => two project-documents if 2 projects).
+ * - If you have a different endpoint shape, update the `saveEntryToServer` function.
  */
 
 const Calendar = () => {
-  const [currentDate, setCurrentDate] = useState(new Date());
-  const [selectedDate, setSelectedDate] = useState(null);
-
-  const [activitiesByDate, setActivitiesByDate] = useState({});
-  const [selectedProjectId, setSelectedProjectId] = useState("");
-  const [progressValue, setProgressValue] = useState("");
-  const [note, setNote] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [dailyProgress, setDailyProgress] = useState([]);
-
   const { projects = [], backendUrl, token } = useContext(UsersContext);
 
-  // ✅ Fetch daily progress data from backend
-useEffect(() => {
-  const fetchDailyProgress = async () => {
-    try {
-      const res = await axios.get("http://localhost:4000/api/project-progress/daily-progress");
-      console.log(res);
-      
-      setDailyProgress(res.data.data || []);
-    } catch (error) {
-      console.error("Error fetching daily progress:", error);
-      setDailyProgress([]);
-    }
-  };
-  fetchDailyProgress();
-}, []);
+  const activeProjects = useMemo(() => projects.filter((p) => p.projectStatus === "active"), [projects]);
 
-
-  useEffect(() => {
-    const fetchData = async () => {
-      const data = setDailyProgress();
-      setDailyProgress(data);
-    };
-    fetchData();
-  }, []);
-
-  console.log(dailyProgress);
-  
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const [selectedDate, setSelectedDate] = useState(null);
+  const [progressByProject, setProgressByProject] = useState({}); // { projectId: value }
+  const [activitiesByDate, setActivitiesByDate] = useState({}); // { dateKey: [{ projectId, progress, _id, synced }] }
+  const [loading, setLoading] = useState(false);
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
@@ -60,381 +34,364 @@ useEffect(() => {
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const firstDay = new Date(year, month, 1).getDay();
 
-  const monthNames = useMemo(
-    () => [
-      "January","February","March","April","May","June",
-      "July","August","September","October","November","December"
-    ],
-    []
-  );
+  const monthNames = [
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+  ];
 
-  const STORAGE_KEY = "projectProgressByDate_v1";
+  const dateKey = (d) => new Date(d).toDateString();
 
-  // Load from localStorage on mount
+  // Load existing progress for this month from backend (to mark days with progress)
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) setActivitiesByDate(JSON.parse(raw));
-    } catch (err) {
-      console.warn("Failed to read localStorage", err);
+    if (!backendUrl) {
+      // load localStorage fallback if present
+      const localMap = {};
+      activeProjects.forEach((p) => {
+        const key = `project_daily_${p._id || p.id}`;
+        try {
+          const store = JSON.parse(localStorage.getItem(key) || "null");
+          if (Array.isArray(store)) {
+            store.forEach((entry) => {
+              const k = dateKey(entry.date);
+              localMap[k] = localMap[k] || [];
+              localMap[k].push({ projectId: p._id || p.id, progress: entry.progress, _id: entry._id || null, synced: false });
+            });
+          }
+        } catch (err) {
+          // ignore parse errors
+        }
+      });
+      setActivitiesByDate(localMap);
+      return;
     }
-  }, []);
 
-  // Save to localStorage when data changes
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(activitiesByDate));
-    } catch (err) {
-      console.warn("Failed to save localStorage", err);
-    }
-  }, [activitiesByDate]);
-
-  const dateKey = (d) => d.toDateString();
-
-  // Fetch month data from backend
-  useEffect(() => {
     let cancelled = false;
-    const fetchMonthProgress = async () => {
-      if (!backendUrl) return;
+    (async () => {
       try {
         setLoading(true);
+        // This assumes your backend supports getting month-wide progress:
+        // GET `${backendUrl}/api/project-progress?year=YYYY&month=MM`
         const res = await axios.get(`${backendUrl}/api/project-progress`, {
           params: { year, month: month + 1 },
           headers: token ? { Authorization: `Bearer ${token}` } : {},
         });
 
         if (cancelled) return;
-        if (res?.data) {
-          const newMap = {};
-          (res.data || []).forEach((entry) => {
-            const d = new Date(entry.date);
-            const key = d.toDateString();
-            newMap[key] = newMap[key] || [];
-            newMap[key].push({
-              _id: entry._id,
-              projectId: entry.projectId,
-              projectName: entry.projectName || findProjectName(entry.projectId),
-              progress: entry.progress,
-              note: entry.note || "",
-              dateISO: entry.date,
-            });
+        const newMap = {};
+        (res.data || []).forEach((entry) => {
+          // Expecting entries shaped like: { projectId, progress, date, _id, ... }
+          const d = new Date(entry.date);
+          const k = dateKey(d);
+          newMap[k] = newMap[k] || [];
+          newMap[k].push({
+            _id: entry._id,
+            projectId: entry.projectId,
+            progress: entry.progress,
+            synced: true,
           });
-          setActivitiesByDate(newMap);
-        }
+        });
+        setActivitiesByDate(newMap);
       } catch (err) {
-        console.warn("Failed to fetch monthly progress", err);
-        toast.info("Could not load progress from server — using local copy");
+        console.warn("Failed to load monthly progress, falling back to empty map", err);
+        toast.info("Could not load progress from server — calendar will show local/empty state");
+        setActivitiesByDate({});
       } finally {
         if (!cancelled) setLoading(false);
       }
-    };
+    })();
 
-    fetchMonthProgress();
     return () => {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [year, month, backendUrl, token]);
+  }, [year, month, backendUrl, token, /* activeProjects intentionally omitted */]);
 
-  // 🟢 Auto-run backend daily save when Calendar mounts
-  useEffect(() => {
-    if (!backendUrl) return;
-    const runAutoSave = async () => {
-      try {
-        const res = await axios.get(`${backendUrl}/api/test-auto-save`);
-        if (res.status === 200) {
-          // Optional: refresh calendar after auto-save
-          setTimeout(() => window.location.reload(), 1500);
-        }
-      } catch (err) {
-        console.warn("Auto-save trigger failed", err);
-        toast.info("Could not auto-save (server may be offline)");
-      }
-    };
-    runAutoSave();
-  }, [backendUrl]);
-
-  // Find project name helper
-  function findProjectName(projectId) {
-    const p = projects.find(
-      (x) =>
-        String(x._id) === String(projectId) || String(x.id) === String(projectId)
-    );
-    return p ? p.projectName || p.name || p.title || p.Name : "Unknown Project";
-  }
-
-  // Save progress manually
-  const handleSaveProgress = async () => {
-    if (!selectedDate) return toast.error("Select a date first");
-    if (!selectedProjectId) return toast.error("Select a project");
-    const progress = Number(progressValue);
-    if (isNaN(progress) || progress < 0 || progress > 100)
-      return toast.error("Progress must be 0–100");
-
-    const payload = {
-      projectId: selectedProjectId,
-      projectName: findProjectName(selectedProjectId),
-      date: selectedDate.toISOString(),
-      progress,
-      note: note || "",
-    };
-
-    const key = dateKey(selectedDate);
-    const newEntryLocal = {
-      _id: `local-${Date.now()}`,
-      projectId: payload.projectId,
-      projectName: payload.projectName,
-      progress: payload.progress,
-      note: payload.note,
-      dateISO: payload.date,
-      synced: false,
-    };
-    setActivitiesByDate((prev) => {
-      const copy = { ...(prev || {}) };
-      copy[key] = copy[key] ? [...copy[key], newEntryLocal] : [newEntryLocal];
-      return copy;
-    });
-
-    if (!backendUrl) {
-      toast.success("Saved locally (no backend configured)");
-      setProgressValue("");
-      setNote("");
-      setSelectedProjectId("");
-      return;
-    }
-
-    try {
-      setLoading(true);
-      const res = await axios.post(`${backendUrl}/api/project-progress`, payload, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-
-      const saved = res?.data;
-      setActivitiesByDate((prev) => {
-        const copy = { ...(prev || {}) };
-        const arr = copy[key] || [];
-        const filtered = arr.filter(
-          (e) =>
-            !(
-              e.projectId === newEntryLocal.projectId &&
-              e.dateISO === newEntryLocal.dateISO &&
-              e._id === newEntryLocal._id
-            )
-        );
-        const normalized = {
-          _id: saved._id || saved.id || `srv-${Date.now()}`,
-          projectId: saved.projectId || payload.projectId,
-          projectName: saved.projectName || payload.projectName,
-          progress: saved.progress ?? payload.progress,
-          note: saved.note ?? payload.note,
-          dateISO: saved.date || payload.date,
-          synced: true,
-        };
-        copy[key] = [...filtered, normalized];
-        return copy;
-      });
-
-      toast.success("Progress saved to server");
-    } catch (err) {
-      console.error("Failed to save progress to server:", err);
-      toast.error("Failed to save to server — saved locally");
-    } finally {
-      setLoading(false);
-      setProgressValue("");
-      setNote("");
-      setSelectedProjectId("");
-    }
-  };
-
-  const handlePrevMonth = () =>
-    setCurrentDate(new Date(year, month - 1, 1));
-  const handleNextMonth = () =>
-    setCurrentDate(new Date(year, month + 1, 1));
-
+  // Render calendar days, marking days that have entries
   const renderDays = () => {
     const days = [];
     for (let i = 0; i < firstDay; i++) {
-      days.push(<div key={"empty-" + i} className="p-3" />);
+      days.push(<div key={"empty-" + i} className="p-2" />);
     }
-
-    for (let day = 1; day <= daysInMonth; day++) {
-      const date = new Date(year, month, day);
-      const key = dateKey(date);
-      const hasEntries =
-        Array.isArray(activitiesByDate[key]) && activitiesByDate[key].length > 0;
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dateObj = new Date(year, month, d);
+      const key = dateKey(dateObj);
+      const hasEntries = Array.isArray(activitiesByDate[key]) && activitiesByDate[key].length > 0;
 
       days.push(
         <div
-          key={day}
-          onClick={() => setSelectedDate(date)}
-          className={`p-3 border rounded-lg cursor-pointer hover:bg-blue-100 transition
-            ${selectedDate?.toDateString() === key ? "bg-blue-200" : ""}
-            ${hasEntries ? "bg-green-50" : ""}`}
+          key={d}
+          onClick={() => openDayEditor(dateObj)}
+          className={`p-2 text-center border rounded-md hover:bg-blue-50 cursor-pointer relative ${
+            selectedDate && dateKey(selectedDate) === key ? "bg-blue-100" : ""
+          }`}
         >
-          <p className="font-medium">{day}</p>
-          {hasEntries && (
-            <div className="mt-1 space-y-1">
-              {activitiesByDate[key].slice(0, 2).map((e, idx) => (
-                <div key={e._id || idx} className="text-xs text-green-700 truncate">
-                  {e.projectName} — {e.progress}%{e.synced === false ? " (local)" : ""}
-                </div>
-              ))}
-              {activitiesByDate[key].length > 2 && (
-                <div className="text-xs text-gray-500">
-                  +{activitiesByDate[key].length - 2} more
-                </div>
-              )}
-            </div>
-          )}
+          <div className="font-medium">{d}</div>
+          {hasEntries && <div className="absolute bottom-1 left-1 right-1 text-[10px] text-green-700">● {activitiesByDate[key].length}</div>}
         </div>
       );
     }
     return days;
   };
 
-  const handleDeleteEntry = async (entry) => {
-    if (!selectedDate || !entry) return;
-    const key = dateKey(selectedDate);
+  const openDayEditor = (dateObj) => {
+    setSelectedDate(dateObj);
+    // initialize inputs for each active project (if there's an existing entry, prefill)
+    const key = dateKey(dateObj);
+    const existing = activitiesByDate[key] || [];
+    const map = {};
+    activeProjects.forEach((p) => {
+      const pid = p._id || p.id;
+      const found = existing.find((e) => String(e.projectId) === String(pid));
+      map[pid] = found ? found.progress : "";
+    });
+    setProgressByProject(map);
+  };
+
+  const closeDayEditor = () => {
+    setSelectedDate(null);
+    setProgressByProject({});
+  };
+
+  // Save single project's entry to server (or to localStorage fallback)
+  const saveEntryToServer = async ({ projectId, dateISO, progress }) => {
+    if (!backendUrl) {
+      // fallback to localStorage: store array under project_daily_<projectId>
+      try {
+        const key = `project_daily_${projectId}`;
+        const existing = JSON.parse(localStorage.getItem(key) || "[]");
+        const foundIndex = existing.findIndex((e) => new Date(e.date).toDateString() === new Date(dateISO).toDateString());
+        if (foundIndex >= 0) {
+          existing[foundIndex].progress = progress;
+          existing[foundIndex].date = dateISO;
+        } else {
+          existing.push({ _id: `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, date: dateISO, progress });
+        }
+        localStorage.setItem(key, JSON.stringify(existing));
+        return { ok: true, local: true };
+      } catch (err) {
+        return { ok: false, error: err };
+      }
+    }
+
+    try {
+      // Primary assumption: backend accepts a POST to save a single daily entry for a project.
+      // Adjust the URL & payload if your backend expects a different shape.
+      const res = await axios.post(
+        `${backendUrl}/api/project-progress/daily`,
+        { projectId, date: dateISO, progress },
+        { headers: token ? { Authorization: `Bearer ${token}` } : {} }
+      );
+      return { ok: true, data: res.data };
+    } catch (err) {
+      console.error("Failed saving entry to server", err);
+      return { ok: false, error: err };
+    }
+  };
+
+  // Handle Save for the selected date — will issue one request per active project that has a numeric progress value
+  const handleSaveDaily = async () => {
+    if (!selectedDate) return toast.error("Select a date first");
+    const dateISO = selectedDate.toISOString();
+
+    // gather entries to save: only include projects with a numeric progress value
+    const entriesToSave = activeProjects
+      .map((p) => {
+        const pid = p._id || p.id;
+        const raw = progressByProject[pid];
+        const progress = raw === "" || raw === null || raw === undefined ? null : Number(raw);
+        if (progress === null || Number.isNaN(progress) || progress < 0 || progress > 100) {
+          return null;
+        }
+        return { projectId: pid, projectName: p.projectName || p.name || "Untitled", progress };
+      })
+      .filter(Boolean);
+
+    if (entriesToSave.length === 0) {
+      toast.info("No valid progress entered for active projects");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      // send one request per project (this creates/updates one project document each on backend)
+      const results = await Promise.all(
+        entriesToSave.map((e) => saveEntryToServer({ projectId: e.projectId, dateISO, progress: e.progress }))
+      );
+
+      // optimistic update local map based on successful saves
+      setActivitiesByDate((prev) => {
+        const copy = { ...(prev || {}) };
+        const k = dateKey(selectedDate);
+        copy[k] = copy[k] || [];
+
+        entriesToSave.forEach((entry, idx) => {
+          const res = results[idx];
+          const existingIndex = copy[k].findIndex((x) => String(x.projectId) === String(entry.projectId));
+          const newRecord = {
+            _id: res.ok && res.data && res.data._id ? res.data._id : `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            projectId: entry.projectId,
+            progress: entry.progress,
+            synced: res.ok && !res.local,
+          };
+          if (existingIndex >= 0) {
+            copy[k][existingIndex] = newRecord;
+          } else {
+            copy[k].push(newRecord);
+          }
+        });
+
+        return copy;
+      });
+
+      // show results / errors
+      const failed = results.filter((r) => !r.ok);
+      if (failed.length === 0) {
+        toast.success("Saved daily progress for active projects");
+      } else {
+        toast.warn(`${failed.length} of ${results.length} saves failed — saved remaining locally`);
+      }
+    } finally {
+      setLoading(false);
+      closeDayEditor();
+    }
+  };
+
+  // Delete a project's entry for the selected date (local UI + server delete if applicable)
+  const handleDeleteProjectEntry = async (projectId) => {
+    if (!selectedDate) return;
+    const k = dateKey(selectedDate);
+
+    // optimistic UI remove
     setActivitiesByDate((prev) => {
       const copy = { ...(prev || {}) };
-      copy[key] = (copy[key] || []).filter((e) => e._id !== entry._id);
-      if (!copy[key].length) delete copy[key];
+      copy[k] = (copy[k] || []).filter((e) => String(e.projectId) !== String(projectId));
+      if (!copy[k].length) delete copy[k];
       return copy;
     });
 
-    if (backendUrl && entry._id && !String(entry._id).startsWith("local-")) {
+    if (!backendUrl) {
+      // remove from localStorage fallback
       try {
-        await axios.delete(`${backendUrl}/api/project-progress/${entry._id}`, {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        });
-        toast.success("Deleted from server");
+        const key = `project_daily_${projectId}`;
+        const existing = JSON.parse(localStorage.getItem(key) || "[]");
+        const filtered = existing.filter((e) => new Date(e.date).toDateString() !== selectedDate.toDateString());
+        localStorage.setItem(key, JSON.stringify(filtered));
+        toast.info("Deleted local entry");
       } catch (err) {
-        console.error("Failed deleting on server", err);
-        toast.error("Failed to delete on server");
+        toast.error("Failed deleting local entry");
       }
-    } else {
-      toast.info("Deleted locally");
+      return;
+    }
+
+    try {
+      // Attempt to delete on server (assumes DELETE /api/project-progress/:projectId?date=ISO )
+      await axios.delete(`${backendUrl}/api/project-progress/${projectId}`, {
+        params: { date: selectedDate.toISOString() },
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      toast.success("Deleted on server");
+    } catch (err) {
+      console.warn("Server delete failed", err);
+      toast.warn("Failed to delete on server (it may be removed locally)");
     }
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 flex flex-col items-center py-8 mt-26">
+    <div className="min-h-screen bg-gray-100 flex flex-col items-center py-6 mt-28">
       <ToastContainer position="top-right" autoClose={2500} />
-      <div className="bg-white p-6 rounded-2xl shadow-md w-[90%] max-w-2xl">
-        <div className="flex justify-between items-center mb-4">
-          <button onClick={handlePrevMonth} className="text-blue-600 font-bold">←</button>
-          <h2 className="text-xl font-semibold">{monthNames[month]} {year}</h2>
-          <button onClick={handleNextMonth} className="text-blue-600 font-bold">→</button>
+      <div className="bg-white p-4 rounded-2xl shadow-md w-[95%] max-w-md">
+        <div className="flex justify-between items-center mb-3">
+          <button onClick={() => setCurrentDate(new Date(year, month - 1, 1))} className="text-blue-600 font-bold text-sm">
+            ←
+          </button>
+          <h2 className="text-lg font-semibold">
+            {monthNames[month]} {year}
+          </h2>
+          <button onClick={() => setCurrentDate(new Date(year, month + 1, 1))} className="text-blue-600 font-bold text-sm">
+            →
+          </button>
         </div>
 
-        {/* 🟢 Manual Auto-Save Trigger */}
-        {backendUrl && (
-          <div className="flex justify-end mb-4">
-            <button
-              onClick={async () => {
-                try {
-                  const res = await axios.get(`${backendUrl}/api/test-auto-save`);
-                  if (res.status === 200) toast.success("Manual auto-save executed!");
-                } catch (err) {
-                  toast.error("Manual auto-save failed");
-                }
-              }}
-              className="text-sm bg-green-600 text-white px-3 py-1 rounded-md hover:bg-green-700"
-            >
-              Run Auto-Save
-            </button>
-          </div>
-        )}
-
-        <div className="grid grid-cols-7 gap-2 text-center font-medium text-gray-700 mb-2">
-          {["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map((d) => (
+        <div className="grid grid-cols-7 gap-1 text-center font-medium text-gray-700 mb-2 text-sm">
+          {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
             <div key={d}>{d}</div>
           ))}
         </div>
 
-        <div className="grid grid-cols-7 gap-2">{renderDays()}</div>
+        <div className="grid grid-cols-7 gap-1">{renderDays()}</div>
+      </div>
 
-        {selectedDate && (
-          <div className="mt-6 border-t pt-4">
-            <h3 className="text-lg font-semibold mb-2 text-blue-700">
-              {selectedDate.toDateString()}
-            </h3>
+      {/* Day editor modal */}
+      {selectedDate && (
+        <div className="fixed inset-0 z-30 flex items-center justify-center px-4">
+          <div className="absolute inset-0 bg-black opacity-30" onClick={closeDayEditor} />
+          <div className="relative bg-white rounded-lg shadow-lg w-full max-w-lg p-4 z-40">
+            <div className="flex justify-between items-center mb-3">
+              <h3 className="text-md font-semibold">
+                {selectedDate.toDateString()}
+              </h3>
+              <button onClick={closeDayEditor} className="text-gray-500">Close</button>
+            </div>
 
-            <div className="mb-3">
-              <div className="text-sm text-gray-600 mb-2">Existing progress</div>
-              {(activitiesByDate[dateKey(selectedDate)] || []).length === 0 && (
-                <div className="text-sm text-gray-400">No entries yet for this date</div>
-              )}
-              <div className="space-y-2">
-                {(activitiesByDate[dateKey(selectedDate)] || []).map((entry) => (
-                  <div key={entry._id} className="flex items-center justify-between bg-gray-50 p-2 rounded-md">
-                    <div>
-                      <div className="text-sm font-semibold">{entry.projectName}</div>
-                      <div className="text-xs text-gray-500">{entry.progress}% • {entry.note || "No note"}</div>
+            <div className="space-y-3 max-h-72 overflow-auto">
+              {activeProjects.length === 0 && <div className="text-sm text-gray-500">No active projects available.</div>}
+
+              {activeProjects.map((p) => {
+                const pid = p._id || p.id;
+                return (
+                  <div key={pid} className="flex items-center justify-between gap-3 border p-2 rounded-md">
+                    <div className="flex-1">
+                      <div className="font-medium text-sm">{p.projectName || p.name || "Untitled Project"}</div>
+                      <div className="text-xs text-gray-500">Budget: {p.projectbudget ?? "—"}</div>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="w-28">
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        value={progressByProject[pid] ?? ""}
+                        onChange={(e) => setProgressByProject((s) => ({ ...s, [pid]: e.target.value }))}
+                        placeholder="0-100"
+                        className="w-full border rounded px-2 py-1 text-sm"
+                      />
+                    </div>
+                    <div className="w-12">
                       <button
-                        onClick={() => handleDeleteEntry(entry)}
-                        className="text-red-500 text-sm"
+                        onClick={() => handleDeleteProjectEntry(pid)}
+                        className="text-red-500 text-xs"
+                        title="Delete entry for this project on this date"
                       >
                         Delete
                       </button>
                     </div>
                   </div>
-                ))}
-              </div>
+                );
+              })}
             </div>
 
-            <div className="mb-3">
-              <label className="block text-sm font-medium text-gray-700">Project</label>
-              <select
-                value={selectedProjectId}
-                onChange={(e) => setSelectedProjectId(e.target.value)}
-                className="mt-1 w-full p-2 rounded-md border"
+            <div className="mt-4 flex justify-end gap-2">
+              <button onClick={closeDayEditor} className="px-3 py-1 rounded border text-sm">Cancel</button>
+              <button
+                onClick={handleSaveDaily}
+                disabled={loading}
+                className="px-3 py-1 rounded bg-blue-600 text-white text-sm disabled:opacity-60"
               >
-                <option value="">— Select project —</option>
-                {projects.map((p) => (
-                  <option key={p._id || p.id} value={p._id || p.id}>
-                    {p.projectName || p.name || p.title || p.Name}
-                  </option>
-                ))}
-              </select>
+                {loading ? "Saving..." : "Save All"}
+              </button>
             </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Progress (%)</label>
-                <input
-                  value={progressValue}
-                  onChange={(e) => setProgressValue(e.target.value)}
-                  type="number"
-                  min="0"
-                  max="100"
-                  placeholder="e.g. 25"
-                  className="mt-1 p-2 w-full rounded-md border"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Note</label>
-                <input
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
-                  placeholder="optional note"
-                  className="mt-1 p-2 w-full rounded-md border"
-                />
-              </div>
-            </div>
-
-            <button
-              onClick={handleSaveProgress}
-              disabled={loading}
-              className="mt-3 w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700"
-            >
-              {loading ? "Saving..." : "Save Progress"}
-            </button>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 };

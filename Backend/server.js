@@ -10,7 +10,6 @@ import path from "path"
 import dotenv from "dotenv";
 import connectCloudinary from "./Config/cloudinary.js";
 import projectProgressRoutes from "./routes/projectProgressRoutes.js"
-import { autoSaveProjectProgress, runDailySaveNow } from "./cronJobs/autoSaveProgress.js";
 
 dotenv.config();
 connectCloudinary()
@@ -18,7 +17,6 @@ connectCloudinary()
 const app = express();
 const port = 4000;
 connectDB();
-autoSaveProjectProgress()
 
 app.use(express.json());
 app.use(cors({ origin: "*", credentials: true }));

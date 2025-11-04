@@ -2,22 +2,22 @@ import React, { useContext, useState, useEffect, useMemo } from "react";
 import { UsersContext } from "../Context/UserContext";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
-import {jwtDecode} from "jwt-decode";
+import { jwtDecode } from "jwt-decode";
 import axios from "axios";
 
 export default function Dashboard() {
-  const { projects, workers, clockEntries, fetchWorkers, fetchClockEntries, createClockEntry, syncClockEntries, token, backendUrl } =
+  const { projects, workers, clockEntries, fetchWorkers, fetchClockEntries, createClockEntry, syncClockEntries, token, backendUrl, users } =
     useContext(UsersContext);
 
-    console.log(workers);
-    
+  console.log(workers);
 
-    const [email, setEmail] = useState("")
 
-    useEffect(() => {
-  fetchWorkers();
-  fetchClockEntries;
-}, []);
+  const [email, setEmail] = useState("")
+
+  useEffect(() => {
+    fetchWorkers();
+    fetchClockEntries;
+  }, []);
 
 
 
@@ -33,18 +33,18 @@ export default function Dashboard() {
       return "";
     }
   }, [token]);
-  
+
 
   /** USER ROLE */
-const userRole = useMemo(() => {
-  try {
-    if (!token) return "";
-    const decoded = jwtDecode(token);
-    return decoded.role || ""; // make sure backend includes 'role' in JWT
-  } catch {
-    return "";
-  }
-}, [token]);
+  const userRole = useMemo(() => {
+    try {
+      if (!token) return "";
+      const decoded = jwtDecode(token);
+      return decoded.role || ""; // make sure backend includes 'role' in JWT
+    } catch {
+      return "";
+    }
+  }, [token]);
 
 
   /** ONLINE/OFFLINE STATUS */
@@ -60,8 +60,8 @@ const userRole = useMemo(() => {
     };
   }, []);
 
-  
-  
+
+
 
   /** SYNC PROMPT FOR UNSYNCED CLOCK ENTRIES */
   const [showSyncPrompt, setShowSyncPrompt] = useState(false);
@@ -93,7 +93,7 @@ const userRole = useMemo(() => {
     return busy.size;
   }, [projects]);
 
-  
+
 
   /** ACTIVE PROJECTS */
   const activeProjects = projects.filter((p) => p.projectStatus === "active");
@@ -111,21 +111,47 @@ const userRole = useMemo(() => {
 
   /** HELPER: GET LAST ENTRY FOR WORKER */
   function getLastEntry(workerName) {
-  const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
-  return [...clockEntries]
-    .reverse()
-    .find((e) => {
-      const entryDate = new Date(e.time).toISOString().split("T")[0];
-      return (
-        e.worker.toLowerCase() === workerName.toLowerCase() &&
-        entryDate === today
+    const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
+    return [...clockEntries]
+      .reverse()
+      .find((e) => {
+        const entryDate = new Date(e.time).toISOString().split("T")[0];
+        return (
+          e.worker.toLowerCase() === workerName.toLowerCase() &&
+          entryDate === today
+        );
+      });
+  }
+
+  /** ✅ Match logged-in user (from email) to worker name */
+const [matchedWorker, setMatchedWorker] = useState(null);
+
+useEffect(() => {
+  if (!token || !workers.length || !users.length) return;
+
+  try {
+    const decoded = jwtDecode(token);
+    const userEmail = decoded.email;
+
+    // Find user in users list
+    const foundUser = users.find(u => u.email === userEmail);
+
+    if (foundUser) {
+      // Match worker where Name = user's name (case-insensitive)
+      const workerMatch = workers.find(
+        w => w.Name.toLowerCase() === foundUser.name.toLowerCase()
       );
-    });
-}
+      setMatchedWorker(workerMatch || null);
+    }
+  } catch (err) {
+    console.error("Error matching user to worker:", err);
+  }
+}, [token, users, workers]);
+
 
 
   return (
-    <div className="p-8 min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-100 relative overflow-hidden mt-26 z-0">
+    <div className="p-8 min-h-screen bg-white/100 relative overflow-hidden mt-26 z-0">
       {/* Background */}
       <div className="absolute top-0 left-0 w-full h-full -z-10">
         <div className="absolute w-full h-full bg-gradient-to-br from-indigo-100 via-purple-100 to-pink-50 opacity-80" />
@@ -137,122 +163,106 @@ const userRole = useMemo(() => {
         </svg>
       </div>
 
+      <div className="flex justify-center items-center">
+      <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="mb-4 text-center md:text-left relative z-10"> <p className="text-3xl font-extrabold bg-gradient-to-r from-blue-600 via-purple-600 to-pink-500 bg-clip-text text-transparent mb-2 drop-shadow-lg"> Project Management Dashboard </p> <p className="text-gray-700 text-lg drop-shadow-sm"> Live overview of people, projects, and daily activities. </p> </motion.div>
+
       {/* Header */}
-      <div className="flex items-center justify-center gap-4">
-      <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="mb-4 text-center md:text-left relative z-10">
-        <p className="text-3xl font-extrabold bg-gradient-to-r from-blue-600 via-purple-600 to-pink-500 bg-clip-text text-transparent mb-2 drop-shadow-lg">
-          Project Management Dashboard
-        </p>
-        <p className="text-gray-700 text-lg drop-shadow-sm">
-          Live overview of people, projects, and daily activities.
-        </p>
-      </motion.div>
-      <div className="flex items-center justify-center gap-2 p-6 mb-8 relative z-10">
+      {/* ✅ Show only if logged in & matched worker */}
+{token && matchedWorker && (
+  <div className="flex items-center justify-center gap-2 p-6 mb-0 relative z-10">
+    {/* Project Selector */}
+    <select
+      className="border border-gray-300 rounded-lg px-3 py-2 mt-4 shadow-sm bg-white mb-4"
+      value={selectedProject}
+      onChange={(e) => setSelectedProject(e.target.value)}
+    >
+      {projects.map((proj, i) => (
+        <option key={i} value={proj.projectName}>
+          {proj.projectName}
+        </option>
+      ))}
+    </select>
 
-        {/* Project Selector - hide for admin or supervisor */}
-{userRole === "worker" && (
-  <select
-    className="border border-gray-300 rounded-lg px-3 py-2 mt-4 shadow-sm bg-white mb-4"
-    value={selectedProject}
-    onChange={(e) => setSelectedProject(e.target.value)}
-  >
-    {projects.map((proj, i) => (
-      <option key={i} value={proj.projectName}>
-        {proj.projectName}
-      </option>
-    ))}
-  </select>
-)}
+    {/* Clock In / Out Button */}
+    {(() => {
+      const last = getLastEntry(matchedWorker.Name);
+      const isClockedIn = last?.type === "clock-in";
 
+      return !isClockedIn ? (
+        <motion.button
+          whileHover={{ scale: 1.05 }}
+          onClick={() => {
+            if (window.confirm(`Clock in ${matchedWorker.Name} for ${selectedProject}?`)) {
+              if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                  async (position) => {
+                    const latitude = position.coords.latitude.toFixed(8);
+                    const longitude = position.coords.longitude.toFixed(8);
+                    const accuracy = position.coords.accuracy;
 
-        {/* Worker Actions */}
-        {workersList
-          .filter((w) => w.Name.toLowerCase().includes(userName.toLowerCase()))
-          .map((worker, idx) => {
-            const last = getLastEntry(worker.Name);
-            const isClockedIn = last?.type === "clock-in";
-            const clockInTime =
-              isClockedIn && last?.time
-                ? new Date(last.time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-                : null;
+                    createClockEntry({
+                      worker: matchedWorker.Name,
+                      project: selectedProject,
+                      type: "clock-in",
+                    });
 
-            return (
-              <div key={idx} className="flex justify-between items-center py-2">
-
-                <div>
-                  {!isClockedIn ? (
-  <motion.button
-    whileHover={{ scale: 1.05 }}
-    onClick={() => {
-      if (window.confirm(`Clock in ${worker.Name} for ${selectedProject}?`)) {
-        if (navigator.geolocation) {
-          navigator.geolocation.getCurrentPosition(
-            async (position) => {
-              const latitude = position.coords.latitude.toFixed(8);
-          const longitude = position.coords.longitude.toFixed(8);
-          const accuracy = position.coords.accuracy; // in meters
-              createClockEntry({
-            worker: worker.Name,
-            project: (projects && projects[0]?.projectName) || "N/A",
-            type: "clock-in",
-          });
-
-          // 2️⃣ Send to backend
-          try {
-            const res = await axios.post(
-              `${backendUrl}/api/clock-in`,
-              {
-                workerId: worker._id,
-                latitude,
-                longitude,
-                accuracy,
-              },
-              {
-                headers: {
-                  "Content-Type": "application/json",
-                  Authorization: `Bearer ${token}`,
-                },
+                    try {
+                      const res = await axios.post(
+                        `${backendUrl}/api/clock-in`,
+                        {
+                          workerId: matchedWorker._id,
+                          latitude,
+                          longitude,
+                          accuracy,
+                        },
+                        {
+                          headers: {
+                            "Content-Type": "application/json",
+                            Authorization: `Bearer ${token}`,
+                          },
+                        }
+                      );
+                      console.log("✅ Location stored:", res.data);
+                    } catch (err) {
+                      console.error("❌ Error saving worker location:", err);
+                    }
+                  },
+                  (error) => {
+                    alert("Please enable location access and try again.");
+                    console.error("Location error:", error);
+                  }
+                );
+              } else {
+                alert("Geolocation not supported in this browser.");
               }
-            );
-            console.log("✅ Location stored:", res.data);
-          } catch (err) {
-            console.error("❌ Error saving worker location:", err);
-          }
-            },
-            (error) => {
-              alert("Unable to get location. Please allow location access and try again.");
-              console.error("Location error:", error);
             }
-          );
-        } else {
-          alert("Geolocation is not supported by this browser.");
-        }
-      }
-    }}
-    className="px-3 py-2 rounded font-semibold shadow bg-green-700 text-white hover:bg-blue-800"
-  >
-    Clock In
-  </motion.button>
-) : (
-  <motion.button
-    whileHover={{ scale: 1.05 }}
-    onClick={() => {
-      if (window.confirm(`Clock out ${worker.Name} from ${selectedProject}?`)) {
-        createClockEntry({ worker: worker.Name, project: selectedProject, type: "clock-out" });
-      }
-    }}
-    className="px-3 py-2 rounded font-semibold shadow bg-red-200 text-red-800 hover:bg-red-300"
-  >
-    Clock Out
-  </motion.button>
+          }}
+          className="px-3 py-2 rounded font-semibold shadow bg-green-700 text-white hover:bg-green-800"
+        >
+          Clock In
+        </motion.button>
+      ) : (
+        <motion.button
+          whileHover={{ scale: 1.05 }}
+          onClick={() => {
+            if (window.confirm(`Clock out ${matchedWorker.Name} from ${selectedProject}?`)) {
+              createClockEntry({
+                worker: matchedWorker.Name,
+                project: selectedProject,
+                type: "clock-out",
+              });
+            }
+          }}
+          className="px-3 py-2 rounded font-semibold shadow bg-red-200 text-red-800 hover:bg-red-300"
+        >
+          Clock Out
+        </motion.button>
+      );
+    })()}
+  </div>
 )}
+</div>
 
-                </div>
-              </div>
-            );
-          })}
-      </div>
-      </div>
 
       {/* Sync / Online Status
       <div className="flex items-center gap-3 mb-4 relative z-10">
@@ -277,7 +287,7 @@ const userRole = useMemo(() => {
           <motion.div
             key={idx}
             className="bg-white/90 backdrop-blur-md shadow-md rounded-2xl p-3 flex items-center justify-center border border-gray-200 transform-gpu"
-            
+
             transition={{ type: "spring", stiffness: 200, damping: 12 }}
           >
             <div className="text-3xl mb-3">{item.icon}</div>
@@ -316,7 +326,7 @@ const userRole = useMemo(() => {
 
           {/* Recent Activity */}
           <motion.div
-            className="bg-white/90 backdrop-blur-md shadow-xl rounded-2xl p-6"
+            className="bg-white/90 backdrop-blur-md shadow-md rounded-2xl p-6"
           >
             <p className="text-2xl font-semibold mb-4 text-gray-700">Recent Activity</p>
             {lastEntry ? (

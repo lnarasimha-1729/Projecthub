@@ -5,7 +5,6 @@ import { toast, ToastContainer } from "react-toastify";
 import { jwtDecode } from "jwt-decode";
 import axios from "axios";
 import "react-toastify/dist/ReactToastify.css";
-import WorkerCard from "./WorkerCard";
 
 export default function Workers() {
   const [showAllModal, setShowAllModal] = useState(false);
@@ -85,7 +84,7 @@ export default function Workers() {
     return (workers || []).filter((w) => {
       const t = String(w.workerType || w.Role || w.role || "").toLowerCase().trim();
       // match exact or contains (covers "Worker", "worker", "Supervisor", "supervisor", "worker-lead", etc.)
-      return t === "worker" || t === "supervisor" || t.includes("worker") || t.includes("supervisor");
+      return t === "worker" || t.includes("worker")
     });
   }, [workers]);
 
@@ -596,7 +595,7 @@ export default function Workers() {
       )}
 
       {/* Sections */}
-      <Section
+      {/* <Section
         title="Supervisors"
         workers={workersWithImages}
         projects={projects}
@@ -605,7 +604,7 @@ export default function Workers() {
         ranksMap={ranksMap}
         workerStatsMap={workerStatsMap}
         getStatsForWorker={getStatsForWorker}
-      />
+      /> */}
       <Section
         title="Team Members"
         workers={workersWithImages}
@@ -739,9 +738,8 @@ function Section({ title, workers = [], projects = [], type, topPerformer, ranks
                 <div className="flex-1">
                   <div className="font-bold text-gray-900">{worker.Name}</div>
                   <div className="text-gray-700">{worker.Role}</div>
-                  <WorkerCard key={worker._id} worker={worker} />
 
-                  {/* <div className="text-sm text-gray-500 mt-1">Hours: <span className="font-semibold text-gray-800">{stats?.totalHours ?? worker.totalHoursWorked ?? 0}h</span></div> */}
+                  <div className="text-sm text-gray-500 mt-1">Hours: <span className="font-semibold text-gray-800">{stats?.totalHours ?? worker.totalHoursWorked ?? 0}h</span></div>
                 </div>
               </div>
 

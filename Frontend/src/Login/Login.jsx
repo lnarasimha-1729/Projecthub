@@ -3,6 +3,7 @@ import { UsersContext } from "../Context/UserContext";
 import axios from "axios";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
+import { NavLink } from "react-router-dom";
 
 const Login = () => {
   const [currentState, setCurrentState] = useState("Login");
@@ -101,7 +102,7 @@ const Login = () => {
         />
 
         <div className="w-full flex justify-between text-sm mt-[-8px]">
-          <p className="cursor-pointer">Forgot your password?</p>
+          <NavLink to={"/forgot"} className="cursor-pointer">Forgot your password?</NavLink>
           {currentState === "Login" ? (
             <p
               onClick={() => setCurrentState("Sign Up")}

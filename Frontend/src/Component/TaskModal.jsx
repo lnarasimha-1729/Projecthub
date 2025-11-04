@@ -369,7 +369,7 @@ const TaskModal = ({
       }
     } catch (error) {
       console.error("❌ Error toggling milestone:", error);
-      toast.error("Failed to update milestone");
+      toast.error("Failed to update task");
     }
   };
 
@@ -399,13 +399,13 @@ const TaskModal = ({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-auto"
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-scroll"
         >
           <motion.div
             initial={{ scale: 0.96, y: 20 }}
             animate={{ scale: 1, y: 0 }}
             exit={{ scale: 0.96, y: 20 }}
-            className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl p-6 relative"
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl p-6 relative h-[90%] max-w-[80%] overflow-auto"
           >
             {/* Close */}
             <button
@@ -413,7 +413,7 @@ const TaskModal = ({
               aria-label="Close task modal"
               className="absolute top-4 right-4 text-gray-500 hover:text-gray-900 rounded-full w-9 h-9 flex items-center justify-center text-2xl"
             >
-              ×
+              X
             </button>
 
             {/* Header */}
@@ -445,7 +445,7 @@ const TaskModal = ({
                       aria-label="New task title"
                       value={newTaskTitle}
                       onChange={(e) => setNewTaskTitle(e.target.value)}
-                      placeholder="New task title"
+                      placeholder="New Milestone title"
                       className="border border-gray-200 rounded-xl px-3 py-2 w-56 focus:outline-none focus:ring-2 focus:ring-blue-200"
                     />
                     <motion.button
@@ -453,7 +453,7 @@ const TaskModal = ({
                       onClick={handleAddTask}
                       className="bg-blue-600 text-white px-4 py-2 rounded-lg shadow"
                     >
-                      + Task
+                      + Milestone
                     </motion.button>
                   </div>
                 )}
@@ -638,7 +638,7 @@ const TaskModal = ({
                                     [task._id]: e.target.value,
                                   }))
                                 }
-                                placeholder="Add milestone..."
+                                placeholder="Add Task..."
                                 className="flex-1 border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-200"
                               />
                               <motion.button
@@ -646,7 +646,7 @@ const TaskModal = ({
                                 onClick={() => handleAddMilestone(task._id)}
                                 className="bg-green-600 text-white px-4 py-2 rounded-lg"
                               >
-                                + Milestone
+                                + Task
                               </motion.button>
                             </div>
                           )}
@@ -733,13 +733,6 @@ const TaskModal = ({
                   >
                     Completed
                   </button>
-                </div>
-
-
-                <div>
-                  <h5 className="text-sm font-semibold text-gray-700">Location</h5>
-                  <p className="text-xs text-gray-500 mt-2">
-                  </p>
                 </div>
               </aside>
             </div>

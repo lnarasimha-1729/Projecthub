@@ -36,7 +36,6 @@ const Reports = () => {
         <Team_Allocation projects={activeProjects}/>
         </div>
       <WorkerStatsChart/>
-      <DailyProgressChart/>
       <BudgetChart/>
       </div>
     </div>

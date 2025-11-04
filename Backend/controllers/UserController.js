@@ -218,4 +218,61 @@ export const updateUserProfile = async (req, res) => {
   }
 };
 
+export const emailCheck = async (req, res) => {
+  try {
+    const { email } = req.body;
+    console.log(req.body);
+    
+
+    // 1️⃣ Validate input
+    if (!email) {
+      return res.status(400).json({ success: false, message: "Email is required" });
+    }
+
+    // 2️⃣ Search for user by email
+    const existingUser = await userModel.findOne({ email });
+
+    // 3️⃣ Return result
+    if (existingUser) {
+      return res.status(200).json({
+        success: true,
+        exists: true,
+        message: "Email exists in the database",
+      });
+    } else {
+      return res.status(200).json({
+        success: true,
+        exists: false,
+        message: "Email not found in the database",
+      });
+    }
+  } catch (error) {
+    console.error("Error in emailCheck:", error);
+    res.status(500).json({ success: false, message: "Server error", error: error.message });
+  }
+};
+
+export const changePassword = async (req, res) => {
+  try {
+    const { email, newPassword } = req.body;
+
+    if (!email || !newPassword)
+      return res.status(400).json({ success: false, message: "Missing fields" });
+
+    const hashed = await bcrypt.hash(newPassword, 10);
+    const updated = await userModel.updateOne({ email }, { $set: { password: hashed } });
+
+    if (updated.modifiedCount > 0) {
+      return res.json({ success: true, message: "Password updated successfully" });
+    } else {
+      return res.json({ success: false, message: "User not found or password unchanged" });
+    }
+  } catch (err) {
+    console.error("Error changing password:", err);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+
+
 export { registerUser, loginUser };

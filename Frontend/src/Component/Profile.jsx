@@ -58,9 +58,11 @@ const Profile = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState("");
   const [editEmail, setEditEmail] = useState("");
+  const [editPassword, setEditPassword] = useState("");
+  const [editLoading, setEditLoading] = useState(false);
 
   // Context
-  const { backendUrl, token, workers = [], users = [], clockEntries = [] } = useContext(UsersContext);
+  const { backendUrl, token, workers = [], users = [], clockEntries = [], fetchUserProfile: fetchUserProfileFromContext } = useContext(UsersContext);
   const fileInputRef = useRef(null);
 
   // token-derived info
@@ -74,39 +76,6 @@ const Profile = () => {
     }
   }, [token]);
 
-  const handleSaveProfile = async () => {
-    if (!editName.trim() || !editEmail.trim()) {
-      toast.error("All fields are required");
-      return;
-    }
-
-    try {
-      const res = await axios.put(
-        `${backendUrl}/api/user/profile/${userID}`,
-        { name: editName, email: editEmail },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-
-      if (res.data.success) {
-        toast.success("Profile updated successfully!");
-        setIsEditing(false);
-
-        // Update token if new one is returned
-        if (res.data.token) {
-          localStorage.setItem("token", res.data.token);
-        }
-
-        // Refresh latest data
-        await fetchUserProfile();
-      } else {
-        toast.error(res.data.message || "Update failed");
-      }
-    } catch (err) {
-      console.error("Update error:", err);
-      toast.error("Profile update failed");
-    }
-  };
-
   const userRole = useMemo(() => {
     try {
       if (!token) return "";
@@ -116,6 +85,12 @@ const Profile = () => {
       return "";
     }
   }, [token]);
+
+  // privilege check: admin or supervisor
+  const isPrivileged = useMemo(() => {
+    if (!userRole) return false;
+    return ["admin", "supervisor"].includes(userRole.toString().toLowerCase());
+  }, [userRole]);
 
   const userEmailFromToken = useMemo(() => {
     try {
@@ -135,51 +110,37 @@ const Profile = () => {
   }, [userEmailFromToken]);
 
   // Fetch profile (server copy)
-  // 🔹 FETCH USER PROFILE (keeps data in sync)
-const fetchUserProfile = async () => {
-  if (!userID || !backendUrl) return;
-  try {
-    const res = await axios.get(`${backendUrl}/api/user/profile/${userID}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+  const fetchUserProfile = async () => {
+    if (!userID || !backendUrl) return;
+    try {
+      const res = await axios.get(`${backendUrl}/api/user/profile/${userID}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
 
-    if (res.data?.success) {
-      const user = res.data.user || {};
+      if (res.data?.success) {
+        const user = res.data.user || {};
 
-      // ✅ Make sure we always use the latest updated data
-      setEmail(user.email || "");
-      setMaskedPassword(user.password ? "*".repeat(user.password.length) : "");
-      setProfileImage(getLastProfileImage(user));
+        // ✅ Make sure we always use the latest updated data
+        setEmail(user.email || "");
+        setMaskedPassword(user.password ? "*".repeat(user.password.length) : "");
+        setProfileImage(getLastProfileImage(user));
 
-      // Update edit fields with latest data
-      setEditName(user.Name || user.name || "");
-      setEditEmail(user.email || "");
+        // Update edit fields with latest data
+        setEditName(user.Name || user.name || "");
+        setEditEmail(user.email || "");
+      }
+    } catch (err) {
+      console.error("Error fetching profile:", err);
     }
-  } catch (err) {
-    console.error("Error fetching profile:", err);
-  }
-};
+  };
 
-// 🔹 WHEN CLICKING EDIT BUTTON (always show latest name/email)
-const handleEditClick = async () => {
-  try {
-    await fetchUserProfile(); // ✅ ensure latest data before opening
-    setEditName(editName || email?.split("@")[0] || "");
-    setEditEmail(email || "");
-    setIsEditing(true);
-  } catch (err) {
-    console.error("Error preparing edit modal:", err);
-    toast.error("Failed to load latest data");
-  }
-};
-
-
+  // keep fetching if token changes
   useEffect(() => {
     if (userID) fetchUserProfile();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userID]);
 
-  // Upload image (unchanged)
+  // Upload image
   const uploadImage = async (file) => {
     if (!file || !userID) return;
     setIsUploading(true);
@@ -410,28 +371,25 @@ const handleEditClick = async () => {
   };
 
   useEffect(() => {
-  const updateWorkerHours = async () => {
-    if (!currentWorker || totalHoursWorked === 0) return;
-    try {
-      await axios.put(
-        `${backendUrl}/api/update-hours`,
-        {
-          workerId: currentWorker._id,
-          totalHoursWorked,
-        },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-    } catch (err) {
-      console.error("❌ Failed to update total hours:", err);
-    }
-  };
+    const updateWorkerHours = async () => {
+      if (!currentWorker || totalHoursWorked === 0) return;
+      try {
+        await axios.put(
+          `${backendUrl}/api/update-hours`,
+          {
+            workerId: currentWorker._id,
+            totalHoursWorked,
+          },
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+      } catch (err) {
+        console.error("❌ Failed to update total hours:", err);
+      }
+    };
 
-  // only update when clockEntries change (after Clock In / Out)
-  updateWorkerHours();
-}, [clockEntries, totalHoursWorked, currentWorker, backendUrl, token]);
-
-
-  
+    // only update when clockEntries change (after Clock In / Out)
+    updateWorkerHours();
+  }, [clockEntries, totalHoursWorked, currentWorker, backendUrl, token]);
 
   // Render project bars
   const renderProjectBars = () => {
@@ -457,14 +415,14 @@ const handleEditClick = async () => {
 
   /** ---------- Edit profile logic ---------- **/
 
-  // who can edit? allow when token user matches currentWorker OR userRole === 'admin'
+  // who can edit? allow when token user matches currentWorker OR userRole === 'admin' or 'supervisor'
   const canEdit = useMemo(() => {
     if (!userID) return false;
     if (!currentWorker) {
-      // admins can edit any user profile (if you want to restrict, change)
-      return userRole === "admin";
+      // admins and supervisors can edit any user profile
+      return ["admin", "supervisor"].includes(userRole?.toString()?.toLowerCase?.() ?? "");
     }
-    return String(userID) === String(currentWorker._id) || userRole === "admin";
+    return String(userID) === String(currentWorker._id) || ["admin", "supervisor"].includes(userRole?.toString()?.toLowerCase?.() ?? "");
   }, [userID, currentWorker, userRole]);
 
   // open edit modal and prefill values
@@ -472,7 +430,7 @@ const handleEditClick = async () => {
     setEditName(currentWorker?.Name || currentWorker?.name || "");
     setEditEmail(currentWorker?.email || currentWorker?.Email || email || "");
     setEditPassword(""); // don't prefill password for security
-    setShowEditModal(true);
+    setIsEditing(true);
   };
 
   // submit edit form
@@ -488,8 +446,6 @@ const handleEditClick = async () => {
       const payload = { Name: editName, email: editEmail };
       if (editPassword && editPassword.length >= 6) payload.password = editPassword;
 
-      // attempt PUT to a sensible endpoint
-      // NOTE: your backend route may differ; this is a best-effort path.
       const url = `${backendUrl}/api/user/profile/${userID}`;
       const res = await axios.put(url, payload, {
         headers: { Authorization: `Bearer ${token}` },
@@ -497,17 +453,13 @@ const handleEditClick = async () => {
 
       if (res.data?.success) {
         toast.success("Profile updated");
-        // Update local UI: refresh profile and workers lists by fetching profile
         await fetchUserProfile();
-        // optionally update currentWorker if you maintain workers in context upstream (we assume fetchUserProfile is enough)
-        setShowEditModal(false);
+        setIsEditing(false);
       } else {
-        // If server returns non-success, show message if available
         toast.error(res.data?.message || "Update failed");
       }
     } catch (err) {
       console.error("Profile update failed:", err);
-      // if backend returns validation errors
       const msg = err?.response?.data?.message || err?.message || "Update failed";
       toast.error(String(msg));
     } finally {
@@ -521,7 +473,6 @@ const handleEditClick = async () => {
     const confirmDelete = window.confirm("Remove your profile image?");
     if (!confirmDelete) return;
     try {
-      // best-effort delete endpoint - adapt backend if different
       const url = `${backendUrl}/api/user/profile/${userID}/image`;
       const res = await axios.delete(url, { headers: { Authorization: `Bearer ${token}` } });
       if (res.data?.success) {
@@ -533,7 +484,6 @@ const handleEditClick = async () => {
       }
     } catch (err) {
       console.error("Delete image failed:", err);
-      // Some backends may not implement DELETE; fallback: show message
       toast.error("Could not remove image (backend route may differ)");
     }
   };
@@ -544,142 +494,159 @@ const handleEditClick = async () => {
     <div className="min-h-[70vh] flex items-center justify-center px-4 py-12 bg-gray-50 mt-28">
       <div className="w-full max-w-4xl bg-white rounded-3xl shadow-xl p-8 sm:p-10">
         <div className="flex flex-col lg:flex-row gap-8">
-          {/* LEFT: avatar + basic */}
-          <div className="w-full lg:w-1/3 flex flex-col items-center text-center gap-4">
-            <div className="relative">
-              <div className="w-36 h-36 rounded-full overflow-hidden border-4 border-indigo-100 shadow-inner bg-gray-100">
-                {profileImage ? (
-                  <img src={profileImage} alt="Profile" className="w-full h-full object-cover" onError={(e) => e.currentTarget.src = "https://cdn-icons-png.flaticon.com/512/149/149071.png"} />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center text-gray-400">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="w-12 h-12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 20C3.732 14.943 8.523 11 12 11s8.268 3.943 9.542 9H2.458z" />
-                    </svg>
+          {/* LEFT: avatar + basic (always shown) */}
+          {/* LEFT: avatar + basic (always shown) */}
+<div className="w-full lg:w-1/3 flex flex-col items-center text-center gap-4">
+  {/* DEBUG: confirm role/privilege at runtime */}
+  {console.log("Profile debug -> userRole:", userRole, "isPrivileged:", isPrivileged, "currentWorker:", currentWorker?.Name)}
+
+  <div className="relative">
+    <div className="w-36 h-36 rounded-full overflow-hidden border-4 border-indigo-100 shadow-inner bg-gray-100">
+      {profileImage ? (
+        <img
+          src={profileImage}
+          alt="Profile"
+          className="w-full h-full object-cover"
+          onError={(e) => (e.currentTarget.src = "https://cdn-icons-png.flaticon.com/512/149/149071.png")}
+        />
+      ) : (
+        <div className="w-full h-full flex items-center justify-center text-gray-400">
+          <svg xmlns="http://www.w3.org/2000/svg" className="w-12 h-12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 20C3.732 14.943 8.523 11 12 11s8.268 3.943 9.542 9H2.458z" />
+          </svg>
+        </div>
+      )}
+    </div>
+
+    <label
+      htmlFor="profile-upload"
+      title="Change"
+      className={`absolute bottom-0 right-0 transform translate-x-3 translate-y-3 bg-indigo-600 p-2 rounded-full shadow-md text-white cursor-pointer ${!canEdit ? "hidden" : ""}`}
+    >
+      <input id="profile-upload" type="file" accept="image/*" ref={fileInputRef} className="sr-only" onChange={handleFileChange} disabled={isUploading} />
+      {isUploading ? (
+        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+      ) : (
+        <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M7 16V7a4 4 0 014-4h2a4 4 0 014 4v9M7 16l5-5 5 5" />
+        </svg>
+      )}
+    </label>
+  </div>
+
+  {/* Edit button: visible to owner + admin/supervisor */}
+  {(canEdit || isPrivileged) && (
+    <button onClick={openEditModal} className="bg-gray-200 px-3 py-2 rounded-lg hover:bg-gray-300">
+      Edit Profile
+    </button>
+  )}
+
+  <div className="text-sm text-gray-500 flex items-center gap-2">
+    <span className="break-all">{email || currentWorker?.email || currentWorker?.Email || "—"}</span>
+    {(email || currentWorker?.email) && <button onClick={copyEmail} className="text-sm text-indigo-500 hover:underline">Copy</button>}
+  </div>
+
+  {/* ===== replace stats block with this: show stats ONLY when NOT privileged ===== */}
+  <div className="mt-4 w-full space-y-3">
+    {!isPrivileged ? (
+      <>
+        <div className="bg-indigo-50 p-3 rounded-lg">
+          <div className="text-xs text-indigo-400">Total Hours</div>
+          <div className="text-xl font-semibold text-indigo-700">{formatHoursFriendly(totalHoursWorked)}</div>
+        </div>
+
+        <div className="bg-blue-50 p-3 rounded-lg">
+          <div className="text-xs text-blue-400">Today's Hours</div>
+          <div className="text-lg font-semibold text-blue-700">{formatHoursFriendly(todayHours)}</div>
+        </div>
+
+        <div className="bg-white p-3 rounded-lg border border-gray-100">
+          <div className="text-xs text-gray-400">Completed Projects</div>
+          <div className="text-lg font-semibold text-gray-800">{currentWorker?.completedProjects ?? 0}</div>
+        </div>
+      </>
+    ) : (
+      // optionally show nothing - empty fragment keeps spacing stable
+      <></>
+    )}
+  </div>
+</div>
+
+
+          {/* RIGHT: details, project bars, recent sessions
+              --> Only shown for non-privileged (workers). Admins/Supervisors see only left column minimal data */}
+          {!isPrivileged && (
+            <div className="w-full lg:w-2/3 flex flex-col gap-6">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold text-gray-800">Work Summary</h3>
+                <div className="text-sm text-gray-500">Top Project: <span className="font-semibold text-gray-800"> {topProject || "—"}</span></div>
+              </div>
+
+              <div className="bg-gray-50 p-4 rounded-xl border border-gray-100">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <div className="text-xs text-gray-400">Top Projects Breakdown</div>
+                    <div className="mt-2">{renderProjectBars()}</div>
                   </div>
-                )}
-              </div>
+                  <div>
+                    <div className="text-xs text-gray-400">Role</div>
+                    <div className="mt-1 text-sm font-semibold text-gray-800">{currentWorker?.Role || currentWorker?.workerType || "—"}</div>
 
-              <label htmlFor="profile-upload" title="Change" className="absolute bottom-0 right-0 transform translate-x-3 translate-y-3 bg-indigo-600 p-2 rounded-full shadow-md text-white cursor-pointer">
-                <input id="profile-upload" type="file" accept="image/*" ref={fileInputRef} className="sr-only" onChange={handleFileChange} disabled={isUploading} />
-                {isUploading ? (
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                ) : (
-                  <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M7 16V7a4 4 0 014-4h2a4 4 0 014 4v9M7 16l5-5 5 5" />
-                  </svg>
-                )}
-              </label>
-            </div>
-
-            <button
-                onClick={handleEditClick}
-                className="bg-gray-200 px-3 py-2 rounded-lg hover:bg-gray-300"
-              >
-                Edit Profile
-              </button>
-
-            <div className="text-sm text-gray-500 flex items-center gap-2">
-              <span className="break-all">{email || currentWorker?.email || currentWorker?.Email || "—"}</span>
-              {(email || currentWorker?.email) && <button onClick={copyEmail} className="text-sm text-indigo-500 hover:underline">Copy</button>}
-            </div>
-
-            <div className="mt-4 w-full space-y-3">
-              <div className="bg-indigo-50 p-3 rounded-lg">
-                <div className="text-xs text-indigo-400">Total Hours</div>
-                <div className="text-xl font-semibold text-indigo-700">{formatHoursFriendly(totalHoursWorked)}</div>
-              </div>
-
-              <div className="bg-blue-50 p-3 rounded-lg">
-                <div className="text-xs text-blue-400">Today's Hours</div>
-                <div className="text-lg font-semibold text-blue-700">{formatHoursFriendly(todayHours)}</div>
-              </div>
-
-              <div className="bg-white p-3 rounded-lg border border-gray-100">
-                <div className="text-xs text-gray-400">Completed Projects</div>
-                <div className="text-lg font-semibold text-gray-800">{currentWorker?.completedProjects ?? 0}</div>
-              </div>
-
-              {/* Remove image option when editable and image exists */}
-              {canEdit && profileImage && (
-                <div className="mt-2">
-                  <button onClick={handleRemoveImage} className="text-sm text-red-500 hover:underline">Remove image</button>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* RIGHT: details, project bars, recent sessions */}
-          <div className="w-full lg:w-2/3 flex flex-col gap-6">
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-gray-800">Work Summary</h3>
-              <div className="text-sm text-gray-500">Top Project: <span className="font-semibold text-gray-800"> {topProject || "—"}</span></div>
-            </div>
-
-            <div className="bg-gray-50 p-4 rounded-xl border border-gray-100">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <div className="text-xs text-gray-400">Top Projects Breakdown</div>
-                  <div className="mt-2">{renderProjectBars()}</div>
-                </div>
-                <div>
-                  <div className="text-xs text-gray-400">Role</div>
-                  <div className="mt-1 text-sm font-semibold text-gray-800">{currentWorker?.Role || currentWorker?.workerType || "—"}</div>
-
-                  <div className="text-xs text-gray-400 mt-4">Status</div>
-                  <div className="mt-1 text-sm font-semibold text-gray-800">{currentWorker ? (currentWorker?.isActive ? "Active" : "Inactive") : "—"}</div>
+                    <div className="text-xs text-gray-400 mt-4">Status</div>
+                    <div className="mt-1 text-sm font-semibold text-gray-800">{currentWorker ? (currentWorker?.isActive ? "Active" : "Inactive") : "—"}</div>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            <div>
-              <h4 className="text-md font-semibold text-gray-800 mb-3">Recent Sessions</h4>
+              <div>
+                <h4 className="text-md font-semibold text-gray-800 mb-3">Recent Sessions</h4>
 
-              <div className="overflow-x-auto">
-                <table className="w-full text-left table-auto">
-                  <thead>
-                    <tr className="text-xs text-gray-500 border-b">
-                      <th className="py-2 pr-4">Date</th>
-                      <th className="py-2 pr-4">In</th>
-                      <th className="py-2 pr-4">Out</th>
-                      <th className="py-2 pr-4">Duration</th>
-                      <th className="py-2 pr-4">Project</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {recentSessions.length ? (
-                      recentSessions.map((s, i) => (
-                        <tr key={i} className="text-sm text-gray-700 border-b last:border-b-0">
-                          <td className="py-3 pr-4">{s.date}</td>
-                          <td className="py-3 pr-4">{s.in}</td>
-                          <td className="py-3 pr-4">{s.out}{s.ongoing ? " (now)" : ""}</td>
-                          <td className="py-3 pr-4">{Math.floor(s.minutes / 60)}h {s.minutes % 60}m</td>
-                          <td className="py-3 pr-4">{s.project}</td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan={5} className="py-4 text-center text-sm text-gray-400">No recent sessions</td>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left table-auto">
+                    <thead>
+                      <tr className="text-xs text-gray-500 border-b">
+                        <th className="py-2 pr-4">Date</th>
+                        <th className="py-2 pr-4">In</th>
+                        <th className="py-2 pr-4">Out</th>
+                        <th className="py-2 pr-4">Duration</th>
+                        <th className="py-2 pr-4">Project</th>
                       </tr>
-                    )}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {recentSessions.length ? (
+                        recentSessions.map((s, i) => (
+                          <tr key={i} className="text-sm text-gray-700 border-b last:border-b-0">
+                            <td className="py-3 pr-4">{s.date}</td>
+                            <td className="py-3 pr-4">{s.in}</td>
+                            <td className="py-3 pr-4">{s.out}{s.ongoing ? " (now)" : ""}</td>
+                            <td className="py-3 pr-4">{Math.floor(s.minutes / 60)}h {s.minutes % 60}m</td>
+                            <td className="py-3 pr-4">{s.project}</td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={5} className="py-4 text-center text-sm text-gray-400">No recent sessions</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-            </div>
 
-          </div>
+            </div>
+          )}
         </div>
       </div>
 
       {/* Edit Profile Modal */}
-      {/* Edit Modal */}
       {isEditing && (
         <div className="fixed inset-0 flex items-center justify-center bg-black/40 z-50">
           <div className="bg-white w-full max-w-md rounded-2xl shadow-xl p-6">
             <h2 className="text-xl font-semibold mb-4 text-gray-800">
               Edit Profile
             </h2>
-            <div className="space-y-4">
+            <form onSubmit={handleEditSubmit} className="space-y-4">
               <div>
                 <label className="block text-sm text-gray-600 mb-1">Name</label>
                 <input
@@ -698,21 +665,32 @@ const handleEditClick = async () => {
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-500"
                 />
               </div>
-            </div>
-            <div className="mt-6 flex justify-end gap-3">
-              <button
-                onClick={() => setIsEditing(false)}
-                className="px-4 py-2 rounded-lg bg-gray-200 hover:bg-gray-300 text-gray-700"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSaveProfile}
-                className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white"
-              >
-                Save
-              </button>
-            </div>
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">Password (leave blank to keep)</label>
+                <input
+                  type="password"
+                  value={editPassword}
+                  onChange={(e) => setEditPassword(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+              <div className="mt-6 flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsEditing(false)}
+                  className="px-4 py-2 rounded-lg bg-gray-200 hover:bg-gray-300 text-gray-700"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={editLoading}
+                  className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white"
+                >
+                  {editLoading ? "Saving..." : "Save"}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

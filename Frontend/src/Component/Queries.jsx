@@ -191,8 +191,8 @@ useEffect(() => {
             onClick={() => setActiveStatus(tab)}
             className={`flex items-center gap-2 px-5 py-2 rounded-full font-semibold text-sm transition-all duration-300 ${
               activeStatus === tab
-                ? "bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-md"
-                : "bg-white/70 text-gray-700 hover:bg-blue-50"
+                ? "bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-md rounded"
+                : "bg-white/70 text-gray-700 hover:bg-blue-50 rounded"
             }`}
           >
             {tab}
@@ -210,14 +210,14 @@ useEffect(() => {
       <button
         onClick={openModal}
         type="button"
-        className="ml-auto bg-gradient-to-r from-blue-500 to-purple-500 text-white px-6 py-3 rounded-xl font-semibold shadow hover:opacity-90 transition-all duration-300"
+        className="ml-auto bg-gradient-to-r from-blue-500 to-purple-500 text-white px-6 py-3 rounded font-semibold shadow hover:opacity-90 transition-all duration-300"
       >
         ➕ Post Query
       </button>
     </div>
 
     {/* Query Cards */}
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-8">
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-2">
       {allQueries
         .filter((query) => {
           if (!searchTerm.trim()) return true;
@@ -236,8 +236,7 @@ useEffect(() => {
             initial="hidden"
             animate="visible"
             variants={cardVariants}
-            whileHover={{ scale: 1.03 }}
-            className="relative bg-white/80 backdrop-blur-md border border-gray-200 rounded-2xl shadow-md hover:shadow-2xl transition-all duration-500 overflow-hidden"
+            className="relative bg-white/80 backdrop-blur-md border border-gray-200 rounded-lg shadow-md overflow-hidden"
           >
             <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500" />
 
@@ -379,7 +378,7 @@ useEffect(() => {
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-400"
               >
                 <option value="">Select Project</option>
-                {projects.map((proj) => (
+                {projects.filter((item)=>item.projectStatus === "active").map((proj) => (
                   <option key={proj._id} value={proj.projectName}>
                     {proj.projectName}
                   </option>
