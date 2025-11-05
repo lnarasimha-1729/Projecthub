@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { jwtDecode } from "jwt-decode";
 import axios from "axios";
+import ProjectProgressChart from "./ProjectProgressChart";
 
 export default function Dashboard() {
   const { projects, workers, clockEntries, fetchWorkers, fetchClockEntries, createClockEntry, syncClockEntries, token, backendUrl, users } =
@@ -176,7 +177,7 @@ useEffect(() => {
       value={selectedProject}
       onChange={(e) => setSelectedProject(e.target.value)}
     >
-      {projects.map((proj, i) => (
+      {projects.filter((item)=>item.projectStatus === "active").map((proj, i) => (
         <option key={i} value={proj.projectName}>
           {proj.projectName}
         </option>
@@ -300,29 +301,20 @@ useEffect(() => {
       </div>
 
       {/* Bottom Sections */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 perspective-1000 relative z-10">
-        {/* Activity Chart */}
-        <motion.div
-          className="md:col-span-2 bg-white/90 backdrop-blur-md shadow-2xl rounded-3xl p-6"
-          initial={{ opacity: 0, y: 40 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ type: "spring", stiffness: 150 }}
-        >
-          <p className="text-2xl font-semibold mb-4 text-gray-700">Activity Last 7 Days</p>
-          <div className="h-44 bg-gradient-to-r from-indigo-100 to-blue-50 rounded-2xl flex items-center justify-center text-blue-300 border border-indigo-100 shadow-inner">
-            [Chart Placeholder]
+      <div className="grid w-full gap-6 perspective-1000 relative z-10">
+          <div className="h-fit w-full mt-0 bg-gradient-to-r from-indigo-100 to-blue-50 rounded-2xl flex items-center justify-center text-blue-300 border border-indigo-100 shadow-inner">
+            <ProjectProgressChart/>
           </div>
-        </motion.div>
 
         {/* Right Side Widgets */}
         <div className="flex flex-col gap-6">
           {/* Who's Online */}
-          <motion.div
+          {/* <motion.div
             className="bg-white/90 backdrop-blur-md shadow-xl rounded-2xl p-6"
           >
             <p className="text-2xl font-semibold mb-4 text-gray-700">Who's Online?</p>
             <div className="text-center text-gray-400 mt-6">[No one online currently]</div>
-          </motion.div>
+          </motion.div> */}
 
           {/* Recent Activity */}
           <motion.div

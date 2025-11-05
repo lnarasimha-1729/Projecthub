@@ -12,6 +12,7 @@ const UserContext = ({ children }) => {
   const [workers, setWorkers] = useState(() => JSON.parse(localStorage.getItem("workers")) || []);
   const [queries, setQueries] = useState(() => JSON.parse(localStorage.getItem("queries")) || []);
   const [clockEntries, setClockEntries] = useState([]);
+  const [getDailyProgress, setGetDailyProgress] = useState([])
   const backendUrl = import.meta.env.VITE_BACKEND_URL;
   const navigate = useNavigate();
 
@@ -20,6 +21,19 @@ const UserContext = ({ children }) => {
     const savedToken = localStorage.getItem("token");
     if (savedToken) setToken(savedToken);
   }, []);
+
+  const fetchDailyProgress = async()=>{
+    try{
+      const res = await axios.get(backendUrl + "/api/getDailyProgress", {headers : {token}})
+      setGetDailyProgress(res.data.dailyProgress)
+      return res.data
+    }
+    catch(error){
+      console.log(error);
+      
+    }
+  }
+  
 
   // -------------------- FETCHERS --------------------
   const fetchProjects = async () => {
@@ -108,6 +122,7 @@ const UserContext = ({ children }) => {
       fetchWorkers();
       fetchQueries();
       fetchClockEntries();
+      fetchDailyProgress()
     }
   }, [token]);
 
@@ -438,6 +453,7 @@ const UserContext = ({ children }) => {
         navigate,
         backendUrl,
         projects,
+        getDailyProgress,
         setProjects,
         fetchProjects,
         newProject,

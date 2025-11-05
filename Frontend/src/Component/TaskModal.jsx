@@ -143,8 +143,6 @@ const TaskModal = ({
     }
   };
 
-
-
   const activeProject = useMemo(() => projects.find((p) => p._id === projectId), [projects, projectId]);
   const projectWorkers = useMemo(() => {
     if (!activeProject) return [];
@@ -473,187 +471,217 @@ const TaskModal = ({
                 {filteredTasks.map((task) => (
 
                   <article
-                    key={task._id}
-                    className="bg-white border rounded-xl p-4 shadow-sm hover:shadow-md transition"
-                  >
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex-1 min-w-0">
-                        <h4 className="text-lg font-semibold truncate">{task.title}</h4>
+  key={task._id}
+  className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm hover:shadow-lg transition-all duration-200"
+>
+  {/* Header section */}
+  <div className="flex items-start justify-between mb-2">
+    <div className="flex-1">
+      <h4 className="text-lg font-semibold text-gray-800 truncate">
+        {task.title}
+      </h4>
 
-                        <div className="text-xs text-gray-600 mt-1">
-                          {task.completedAt && (
-                            <p className="text-xs text-green-600 mt-1">
-                              ✅ Completed at: {new Date(task.completedAt).toLocaleString()}
-                            </p>
-                          )}
+      {task.completedAt && (
+        <p className="text-xs text-green-600 mt-1">
+          ✅ Completed at: {new Date(task.completedAt).toLocaleString()}
+        </p>
+      )}
+    </div>
 
-                        </div>
+    {/* Toggle button */}
+    <button
+      onClick={() => toggleMilestoneVisibility(task._id)}
+      className="text-sm text-blue-600 font-medium hover:text-blue-800 transition-colors"
+    >
+      {openMilestones[task._id] ? "Hide ▲" : "Show ▼"}
+    </button>
+  </div>
 
+  {/* Status + Metadata */}
+  <div className="flex items-center flex-wrap gap-3 text-xs text-gray-500 mb-3">
+    <span
+      className={`inline-flex items-center px-2 py-1 rounded-full font-medium ${
+        getTaskStatus(task) === "Completed"
+          ? "bg-green-100 text-green-700"
+          : getTaskStatus(task) === "In Progress"
+          ? "bg-yellow-100 text-yellow-700"
+          : "bg-red-100 text-red-700"
+      }`}
+    >
+      {getTaskStatus(task)}
+    </span>
 
-                        {(role === "supervisor" || role === "admin") && (
-                          <div className="mt-2">
-                            <label className="text-xs text-gray-500 mr-2">Assign Worker:</label>
-                            <select
-                              value={assignments[task._id] || ""}
-                              onChange={(e) => handleWorkerAssign(task._id, e.target.value)}
-                              className="border rounded-lg px-2 py-1 text-sm"
-                            >
-                              <option value="">Select worker</option>
-                              {projectWorkers.map((w) => (
-                                <option key={w._id} value={w.name}>
-                                  {w.name}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                        )}
+    {task.milestones?.length !== undefined && (
+      <span>
+        {task.milestones.length} milestone
+        {task.milestones.length !== 1 ? "s" : ""}
+      </span>
+    )}
+  </div>
 
-                        <ul className="list-disc list-inside text-gray-600">
-                          {(task.assignedWorkers || []).map((assignedWorker, index) => {
-                            let fullWorker = null;
+  {/* Progress bar */}
+  {task.milestones && task.milestones.length > 0 && (
+    <div className="w-full bg-gray-100 rounded-full h-2 mb-3 overflow-hidden">
+      <div
+        className={`h-2 rounded-full transition-all ${
+          getTaskStatus(task) === "Completed"
+            ? "bg-green-500"
+            : getTaskStatus(task) === "In Progress"
+            ? "bg-yellow-400"
+            : "bg-gray-300"
+        }`}
+        style={{
+          width: `${
+            (task.milestones.filter((m) => m.completed).length /
+              task.milestones.length) *
+            100
+          }%`,
+        }}
+      ></div>
+    </div>
+  )}
 
-                            if (typeof assignedWorker === "object" && assignedWorker !== null) {
-                              fullWorker = workers.find(w => String(w._id) === String(assignedWorker._id)) || assignedWorker;
-                            } else if (typeof assignedWorker === "string") {
-                              fullWorker = workers.find(w => String(w._id) === assignedWorker)
-                                || workers.find(w => (w.Name || w.name || "").toLowerCase() === assignedWorker.toLowerCase());
-                            }
+  {/* Assign worker dropdown */}
+  {(role === "supervisor" || role === "admin") && (
+    <div className="mb-3">
+      <label className="text-xs text-gray-500 mr-2">Assign Worker:</label>
+      <select
+        value={assignments[task._id] || ""}
+        onChange={(e) => handleWorkerAssign(task._id, e.target.value)}
+        className="border border-gray-300 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
+      >
+        <option value="">Select worker</option>
+        {projectWorkers.map((w) => (
+          <option key={w._id} value={w.name}>
+            {w.name}
+          </option>
+        ))}
+      </select>
+    </div>
+  )}
 
-                            const workerId = fullWorker?._id;
-                            const displayName = fullWorker?.Name || fullWorker?.name || assignedWorker || "Unknown";
-                            const locationText = workerId
-                              ? (workerLocations[workerId] || locationCacheRef.current[workerId] || "Fetching location...")
-                              : (fullWorker?.location ? "Coords present but no id" : "Worker not found");
+  {/* Assigned workers */}
+  <div className="space-y-1 mb-4">
+    {(task.assignedWorkers || []).map((assignedWorker, index) => {
+      let fullWorker = null;
+      if (typeof assignedWorker === "object" && assignedWorker !== null) {
+        fullWorker =
+          workers.find(
+            (w) => String(w._id) === String(assignedWorker._id)
+          ) || assignedWorker;
+      } else if (typeof assignedWorker === "string") {
+        fullWorker =
+          workers.find((w) => String(w._id) === assignedWorker) ||
+          workers.find(
+            (w) =>
+              (w.Name || w.name || "").toLowerCase() ===
+              assignedWorker.toLowerCase()
+          );
+      }
 
-                            return (
-                              <li key={index}>
-                                <div>
-                                  👷‍♂️ <span className="font-medium">{displayName}</span>
-                                  {(role === "admin" || role === "supervisor") && (
-                                    <div className="text-xs text-blue-600 ml-5">📍 {locationText}</div>
-                                  )}
-                                </div>
-                              </li>
-                            );
-                          })}
-                        </ul>
+      const workerId = fullWorker?._id;
+      const displayName =
+        fullWorker?.Name || fullWorker?.name || assignedWorker || "Unknown";
+      const locationText = workerId
+        ? workerLocations[workerId] ||
+          locationCacheRef.current[workerId] ||
+          "Fetching location..."
+        : fullWorker?.location
+        ? "Coords present but no id"
+        : "Worker not found";
 
+      return (
+        <div
+          key={index}
+          className="flex justify-between items-center bg-gray-50 px-3 py-2 rounded-lg text-sm"
+        >
+          <span className="font-medium">👷‍♂️ {displayName}</span>
+          {(role === "admin" || role === "supervisor") && (
+            <span className="text-xs text-blue-600 truncate max-w-[150px]">
+              📍 {locationText}
+            </span>
+          )}
+        </div>
+      );
+    })}
+  </div>
 
+  {/* Milestone accordion */}
+  <AnimatePresence>
+    {openMilestones[task._id] && (
+      <motion.div
+        initial={{ opacity: 0, height: 0 }}
+        animate={{ opacity: 1, height: "auto" }}
+        exit={{ opacity: 0, height: 0 }}
+        transition={{ duration: 0.2 }}
+        className="mt-3 space-y-3 border-t pt-3"
+      >
+        {task.milestones?.length === 0 && (
+          <p className="text-sm text-gray-400">No milestones yet</p>
+        )}
 
+        {task.milestones?.map((ms) => (
+          <div
+            key={ms._id}
+            className="flex items-center justify-between bg-gray-50 hover:bg-gray-100 border rounded-lg px-3 py-2 transition-all"
+          >
+            <div className="flex items-center gap-3">
+              <input
+                type="checkbox"
+                checked={ms.completed}
+                onChange={() =>
+                  handleToggleMilestone(task._id, ms._id, ms.completed)
+                }
+                className="w-5 h-5 accent-green-600"
+              />
+              <div>
+                <p
+                  className={`text-sm font-medium ${
+                    ms.completed
+                      ? "text-gray-500"
+                      : "text-gray-800"
+                  }`}
+                >
+                  {ms.title}
+                </p>
+                {ms.completedAt && (
+                  <p className="text-xs text-green-600">
+                    {new Date(ms.completedAt).toLocaleString()}
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        ))}
 
+        {/* Add new milestone input */}
+        {canEdit && (
+          <div className="flex gap-2 mt-2">
+            <input
+              value={newMilestoneTitle[task._id] || ""}
+              onChange={(e) =>
+                setNewMilestoneTitle((prev) => ({
+                  ...prev,
+                  [task._id]: e.target.value,
+                }))
+              }
+              placeholder="Add new milestone..."
+              className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-200"
+            />
+            <motion.button
+              whileHover={{ scale: 1.03 }}
+              onClick={() => handleAddMilestone(task._id)}
+              className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm"
+            >
+              + Add
+            </motion.button>
+          </div>
+        )}
+      </motion.div>
+    )}
+  </AnimatePresence>
+</article>
 
-                        {/* small meta row */}
-                        <div className="flex items-center gap-3 mt-2 text-xs text-gray-500">
-                          <span
-                            className={`inline-flex items-center px-2 py-1 rounded-full text-[11px] font-medium ${getTaskStatus(task) === "Completed"
-                                ? "bg-green-100 text-green-700"
-                                : getTaskStatus(task) === "In Progress"
-                                  ? "bg-yellow-100 text-yellow-700"
-                                  : "bg-red-100 text-red-700"
-                              }`}
-                          >
-                            {getTaskStatus(task)}
-                          </span>
-
-                          {task.milestones?.length !== undefined && (
-                            <span>
-                              {task.milestones.length} milestone
-                              {task.milestones.length !== 1 ? "s" : ""}
-                            </span>
-                          )}
-
-                        </div>
-
-                        {address && (
-                          <p className="text-xs text-gray-400 mt-2">
-                            {address.house_number ? address.house_number + ", " : ""}
-                            {address.road}, {address.suburb || address.neighbourhood},{" "}
-                            {address.city || address.town}, {address.state}, {address.country}
-                          </p>
-                        )}
-                      </div>
-
-                      <div className="flex flex-col items-end gap-2">
-                        <button
-                          onClick={() => toggleMilestoneVisibility(task._id)}
-                          className="text-sm text-blue-600 font-medium px-2 py-1"
-                        >
-                          {openMilestones[task._id] ? "Hide ▲" : "Show ▼"}
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Milestones accordion content */}
-                    <AnimatePresence>
-                      {openMilestones[task._id] && (
-                        <motion.div
-                          initial={{ opacity: 0, height: 0 }}
-                          animate={{ opacity: 1, height: "auto" }}
-                          exit={{ opacity: 0, height: 0 }}
-                          className="mt-4 space-y-3"
-                        >
-                          {task.milestones?.length === 0 && (
-                            <div className="text-sm text-gray-400">No milestones yet</div>
-                          )}
-
-                          {task.milestones?.map((ms) => (
-                            <div
-                              key={ms._id}
-                              className="flex items-center justify-between bg-gray-50 p-3 rounded-lg border"
-                            >
-                              <div className="flex items-center gap-3">
-                                <input
-                                  type="checkbox"
-                                  checked={ms.completed}
-                                  onChange={() =>
-                                    handleToggleMilestone(task._id, ms._id, ms.completed)
-                                  }
-                                  className="w-5 h-5 accent-green-500"
-                                />
-                                <div className="min-w-0">
-                                  <div className="text-sm font-medium truncate">{ms.title}</div>
-                                  {ms.completedAt && (
-                                    <div className="text-xs text-green-600 mt-1">
-                                      {new Date(ms.completedAt).toLocaleString()}
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-
-                              {/* optional small action area */}
-                              <div className="text-xs text-gray-400">
-                                {ms.notes ? "Has notes" : ""}
-                              </div>
-                            </div>
-                          ))}
-
-                          {/* Add milestone row */}
-                          {canEdit && (
-                            <div className="flex gap-2 mt-2">
-                              <input
-                                value={newMilestoneTitle[task._id] || ""}
-                                onChange={(e) =>
-                                  setNewMilestoneTitle((prev) => ({
-                                    ...prev,
-                                    [task._id]: e.target.value,
-                                  }))
-                                }
-                                placeholder="Add Task..."
-                                className="flex-1 border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-200"
-                              />
-                              <motion.button
-                                whileHover={{ scale: 1.03 }}
-                                onClick={() => handleAddMilestone(task._id)}
-                                className="bg-green-600 text-white px-4 py-2 rounded-lg"
-                              >
-                                + Task
-                              </motion.button>
-                            </div>
-                          )}
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </article>
                 ))}
               </div>
 

@@ -479,11 +479,9 @@ export default function Workers() {
 
                           {/* Hours Worked */}
                           <td>
-                            {role === "worker" ? (
                               <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-indigo-600 font-medium">
                                 {Number(w.totalHours).toFixed ? Number(w.totalHours).toFixed(2) : Number(w.totalHours)} hrs
                               </td>
-                            ) : ("")}
                           </td>
 
                           {/* Total Projects */}
@@ -526,73 +524,117 @@ export default function Workers() {
 
       {/* Top Performer */}
       {topPerformer && (
-        <div className="mt-10">
-          <div className="flex justify-between">
-            <p className="text-3xl font-extrabold mb-6 text-gray-700">🏆 Top Performer</p>
-            <button
-              onClick={() => setShowAllModal(true)}
-              className="text-indigo-600 font-semibold hover:underline"
-            >
-              View All
-            </button>
+  <section className="mt-14 relative">
+    {/* Section Heading */}
+    <div className="flex justify-between items-center mb-6">
+      <h2 className="text-4xl font-extrabold text-gray-900 flex items-center gap-3">
+        <span className="inline-block bg-gradient-to-r from-yellow-400 via-orange-500 to-pink-500 text-transparent bg-clip-text">
+          🏆 Top Performer
+        </span>
+      </h2>
 
-          </div>
+      <motion.button
+        whileHover={{ scale: 1.05 }}
+        whileTap={{ scale: 0.97 }}
+        onClick={() => setShowAllModal(true)}
+        className="px-4 py-2 text-sm font-semibold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg shadow-sm transition-all"
+      >
+        View All →
+      </motion.button>
+    </div>
 
-          <motion.div className="bg-white rounded-3xl p-6 shadow-sm flex flex-col sm:flex-row sm:items-center gap-5">
-            {/* Avatar */}
-            <div className="flex-shrink-0">
-              <div className="w-28 h-28 rounded-full overflow-hidden shadow-xl ring-4 ring-yellow-400 flex items-center justify-center bg-gradient-to-r from-indigo-500 to-purple-500">
-                {topPerformer.profileImage ? (
-                  <img
-                    src={topPerformer.profileImage}
-                    alt={topPerformer.Name}
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <div className="text-white font-bold text-3xl">
-                    {topPerformer.Name?.[0]?.toUpperCase() || "?"}
-                  </div>
-                )}
-              </div>
-            </div>
+    {/* Card Container */}
+    <motion.div
+      initial={{ opacity: 0, y: 25 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5, ease: "easeOut" }}
+      className="relative overflow-hidden rounded-3xl p-8 shadow-2xl bg-gradient-to-br from-white/90 via-white/70 to-indigo-50 backdrop-blur-xl border border-gray-200 flex flex-col sm:flex-row sm:items-center gap-8"
+    >
+      {/* Decorative background glow */}
+      <div className="absolute -inset-0 bg-gradient-to-r from-yellow-300/20 via-orange-400/10 to-transparent blur-3xl pointer-events-none" />
 
-
-
-            {/* Info */}
-            <div className="flex-1">
-              <div className="flex justify-between">
-                <div>
-                  <div className="font-bold text-xl text-gray-900">{topPerformer.Name}</div>
-                  <div className="text-gray-700">{topPerformer.Role}</div>
-                </div>
-                <div className="mt-1 text-sm text-gray-500">Rank: #{ranksMap[String(topPerformer._id)]}</div>
-              </div>
-
-              <div className="text-yellow-500 font-semibold mt-1">
-                {Number(topPerformer.completedProjects || 0)} Completed Projects
-              </div>
-
-
-
-              {/* Hours Worked */}
-              <div className="mt-2 text-indigo-600 font-medium">
-                ⏱ Hours Worked:{" "}
-                <span className="text-blue-600 mt-1 font-semibold">{(topPerformer.totalHoursWorked ?? getStatsForWorker(topPerformer)?.totalHours) || 0} hrs</span>
-              </div>
-
-              {/* Top Projects */}
-              <div className="mt-3 flex">
-                <p className="font-semibold text-gray-800 mb-2">Top Projects : </p>
-                <div className="flex flex-wrap gap-2 p-0">
-                  {topPerformer.topProjects && topPerformer.topProjects.length > 0
-                    ? renderTopProjectsChips(topPerformer.topProjects)
-                    : renderTopProjectsChips(topPerformerStats?.topProjects)}
-                </div>
-              </div>
-            </div>
-          </motion.div>
+      {/* Left Avatar */}
+      <div className="relative z-10 flex-shrink-0">
+        <div className="w-32 h-32 rounded-full overflow-hidden shadow-2xl ring-4 ring-yellow-400 flex items-center justify-center bg-gradient-to-tr from-indigo-500 to-purple-500 relative">
+          {topPerformer.profileImage ? (
+            <img
+              src={topPerformer.profileImage}
+              alt={topPerformer.Name}
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            <span className="text-white text-4xl font-extrabold">
+              {topPerformer.Name?.[0]?.toUpperCase() || "?"}
+            </span>
+          )}
         </div>
-      )}
+
+        {/* Crown Badge */}
+        <div className="absolute -top-3 -right-2 bg-yellow-400 text-white rounded-full w-10 h-10 flex items-center justify-center text-lg shadow-md">
+          👑
+        </div>
+      </div>
+
+      {/* Right Info Section */}
+      <div className="flex-1 relative z-10 space-y-4">
+        {/* Name & Role */}
+        <div className="flex justify-between items-start flex-wrap gap-2">
+          <div>
+            <h3 className="text-2xl font-bold text-gray-900">{topPerformer.Name}</h3>
+            <p className="text-sm text-gray-600">{topPerformer.Role}</p>
+          </div>
+          <div className="bg-indigo-100 text-indigo-700 px-3 py-1 rounded-full text-xs font-semibold shadow-sm">
+            Rank #{ranksMap[String(topPerformer._id)]}
+          </div>
+        </div>
+
+        {/* Performance Stats */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
+          <div className="bg-white/70 rounded-xl p-3 text-center shadow-sm">
+            <p className="text-gray-500 text-xs">Completed Projects</p>
+            <p className="text-yellow-600 font-semibold text-lg">
+              {Number(topPerformer.completedProjects || 0)}
+            </p>
+          </div>
+          <div className="bg-white/70 rounded-xl p-3 text-center shadow-sm">
+            <p className="text-gray-500 text-xs">Hours Worked</p>
+            <p className="text-indigo-600 font-semibold text-lg">
+              {(topPerformer.totalHoursWorked ??
+                getStatsForWorker(topPerformer)?.totalHours) || 0}{" "}
+              hrs
+            </p>
+          </div>
+          <div className="bg-white/70 rounded-xl p-3 text-center shadow-sm">
+            <p className="text-gray-500 text-xs">Efficiency</p>
+            <p className="text-green-600 font-semibold text-lg">
+              {Math.min(
+                100,
+                Math.round(
+                  ((topPerformer.completedProjects || 0) * 10) /
+                    ((topPerformer.totalHoursWorked || 1) / 10)
+                )
+              )}
+              %
+            </p>
+          </div>
+        </div>
+
+        {/* Top Projects */}
+        <div className="mt-4">
+          <p className="font-semibold text-gray-800 mb-2 text-sm">
+            🌟 Top Projects
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {topPerformer.topProjects && topPerformer.topProjects.length > 0
+              ? renderTopProjectsChips(topPerformer.topProjects)
+              : renderTopProjectsChips(topPerformerStats?.topProjects)}
+          </div>
+        </div>
+      </div>
+    </motion.div>
+  </section>
+)}
+
 
       {/* Sections */}
       {/* <Section

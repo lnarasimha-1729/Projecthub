@@ -8,6 +8,7 @@ import DailyProgressChart from './DailyProgressChart'
 import WorkerStatsChart from './WorkerStatsChart'
 import BudgetChart from './BudgetChart'
 import Team_Allocation from './Team_Allocation'
+import ProjectProgressChart from './ProjectProgressChart'
 
 const Reports = () => {
 
