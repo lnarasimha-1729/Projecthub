@@ -5,6 +5,7 @@ import connectDB from "./Config/mongodb.js";
 import projectRouter from "./routes/ProjectRoute.js";
 import workerRouter from "./routes/WorkerRoute.js";
 import queryRouter from "./routes/QueryRoute.js";
+import chatRoutes from "./routes/chatRoutes.js"
 import clockRouter from "./routes/ClockRoute.js";
 import path from "path"
 import dotenv from "dotenv";
@@ -30,6 +31,7 @@ app.use("/api",workerRouter)
 app.use("/api",queryRouter)
 app.use("/api",clockRouter)
 app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
+app.use("/api/chat", chatRoutes);
 
 app.post('/api/progress/snapshot', async (req, res) => {
     try {

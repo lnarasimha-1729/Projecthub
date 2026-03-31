@@ -1,4 +1,4 @@
-import React, { createContext, useState, useEffect } from "react";
+import React, { createContext, useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import axios from "axios";
@@ -13,6 +13,12 @@ const UserContext = ({ children }) => {
   const [queries, setQueries] = useState(() => JSON.parse(localStorage.getItem("queries")) || []);
   const [clockEntries, setClockEntries] = useState([]);
   const [getDailyProgress, setGetDailyProgress] = useState([])
+
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [query, setQuery] = useState("");
+
+  console.log(query);
+  
   const backendUrl = import.meta.env.VITE_BACKEND_URL;
   const navigate = useNavigate();
 
@@ -445,9 +451,52 @@ const UserContext = ({ children }) => {
     navigate("/login");
   };
 
+  // ================== GLOBAL FILTERING ==================
+const filteredProjects = useMemo(() => {
+  if (!query) return projects;
+
+  return projects.filter(p =>
+    p.name?.toLowerCase().includes(query.toLowerCase()) ||
+    p.location?.toLowerCase().includes(query.toLowerCase()) ||
+    p.description?.toLowerCase()?.includes(query.toLowerCase())
+  );
+}, [projects, query]);
+
+const filteredWorkers = useMemo(() => {
+  if (!query) return workers;
+
+  return workers.filter(w =>
+    w.Name?.toLowerCase().includes(query.toLowerCase()) ||
+    w.Role?.toLowerCase().includes(query.toLowerCase()) ||
+    w.workerType?.toLowerCase().includes(query.toLowerCase())
+  );
+}, [workers, query]);
+
+const filteredQueries = useMemo(() => {
+  if (!query) return queries;
+
+  return queries.filter(q => {
+    const project = projects.find(p => p._id === q.queryProject);
+    const projectName = project?.name || "";
+
+    return (
+      q.queryTitle?.toLowerCase().includes(query.toLowerCase()) ||
+      q.queryDescription?.toLowerCase().includes(query.toLowerCase()) ||
+      q.queryPriority?.toLowerCase().includes(query.toLowerCase()) ||
+      projectName.toLowerCase().includes(query.toLowerCase())
+    );
+  });
+}, [queries, projects, query]);
+
+console.log(users);
+
+
+
   return (
     <UsersContext.Provider
       value={{
+        query,
+        setQuery,
         token,
         setToken,
         navigate,
@@ -476,7 +525,12 @@ const UserContext = ({ children }) => {
         createClockEntry,
         syncClockEntries,
         users,
+        filteredProjects,
+        filteredWorkers,
+        filteredQueries,
         Progress,
+        isSidebarOpen,
+        setIsSidebarOpen,
         addTaskToProject,
         addMilestoneToTask,
         updateMilestoneStatus,

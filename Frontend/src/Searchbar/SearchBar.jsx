@@ -87,9 +87,8 @@ function getProfileImageSrc(profile) {
 
 
 const SearchBar = () => {
-  const { token, navigate, users } = useContext(UsersContext);
+  const { query,setQuery, token, navigate, users, setIsSidebarOpen } = useContext(UsersContext);
   const [email, setEmail] = useState("");
-  const [query, setQuery] = useState("");
   const [role, setRole] = useState("");
 
   useEffect(() => {
@@ -135,43 +134,75 @@ const SearchBar = () => {
 
 
   return (
-    <div className="py-6 bg-gray-50">
-      <div className="flex items-center justify-between px-12">
+  <div className="bg-white px-4 lg:py-3.5">
+    <div className="flex items-center gap-2 px-0 lg:px-12">
+
+      {/* 🍔 Burger (mobile only) */}
+      <button
+        onClick={() => setIsSidebarOpen(true)}
+        className="md:hidden mr-2 p-2 rounded-lg hover:bg-gray-100 transition"
+      >
+        <img
+          src="https://img.icons8.com/ios-filled/30/menu--v1.png"
+          className="w-5 h-5"
+          alt="menu"
+        />
+      </button>
+
+      {/* Search Input */}
+      <div className="relative flex-1 mr-4">
+        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 text-lg">
+          🔍
+        </span>
+
         <input
-          type="search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search... (projects, teams, tasks)"
-          className="border border-gray-400 bg-white w-[80%] py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-black"
+          placeholder="Search projects, team members, queries..."
+          className="
+            w-full lg:w-[90%] px-2 md:!px-5 py-2 md:!py-3
+            rounded-full
+            bg-white/60 backdrop-blur-md
+            border border-gray-200
+            focus:outline-none focus:ring-2 focus:ring-indigo-500
+            transition-all
+            placeholder-gray-400
+            !text-xs md:!text-sm
+          "
         />
+      </div>
 
-        <div className="flex items-center gap-3">
-          <p className="text-sm font-medium">{userName}</p>
+      {/* Profile Section */}
+      <div className="flex items-center gap-4 p-1 bg-blue-50 border-1 px-2 rounded-full border-gray-200">
+        <div className="text-right leading-tight hidden sm:block">
+          <p className="text-sm font-semibold text-gray-700 pt-2.5">{userName}</p>
+        </div>
 
-          {token ? (
-            <Link to="/profile" title="View profile" className="relative">
+        {token ? (
+          <Link to="/profile" className="relative group">
+            <div className="w-9 h-9 rounded-full ring-2 ring-indigo-500 ring-offset-1 shadow-sm overflow-hidden group-hover:scale-105 transition">
               <img
                 src={profileImgSrc}
-                alt={profile?.name?.[0] || "Profile"}
-                className="w-9 h-9 rounded-full object-cover border"
-                onError={(e) => {
-                  e.currentTarget.src = PLACEHOLDER;
-                }}
+                onError={(e) => (e.currentTarget.src = PLACEHOLDER)}
+                alt="Profile"
+                className="w-full h-full object-cover"
               />
-            </Link>
-          ) : (
-            <button
-              onClick={() => navigate("/login")}
-              className="p-1.5 w-9 h-9 rounded-full bg-black flex items-center justify-center"
-              aria-label="Login"
-            >
-              <img className="w-5 h-5" src={PLACEHOLDER} alt="Login" />
-            </button>
-          )}
-        </div>
+            </div>
+          </Link>
+        ) : (
+          <button
+            onClick={() => navigate("/login")}
+            className="w-7 h-7 rounded-full bg-indigo-600 flex items-center justify-center shadow-md hover:bg-indigo-700 transition"
+          >
+            <img className="w-5" src={PLACEHOLDER} alt="Login" />
+          </button>
+        )}
       </div>
     </div>
-  );
+  </div>
+);
+
+
 };
 
 export default SearchBar;

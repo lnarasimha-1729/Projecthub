@@ -12,7 +12,7 @@ function getISTDateString() {
 }
 
 export default function AutoProgressSync() {
-  const { projects } = useContext(UsersContext);
+  const { projects, backendUrl } = useContext(UsersContext);
   const [lastSync, setLastSync] = useState(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [status, setStatus] = useState("");
@@ -35,7 +35,7 @@ export default function AutoProgressSync() {
     try {
       setIsSyncing(true);
       setStatus("Syncing...");
-      const res = await axios.post("http://localhost:4000/api/progress/snapshot", payload);
+      const res = await axios.post(backendUrl + "/api/progress/snapshot", payload);
       setStatus(`Synced successfully on ${today}`);
       setLastSync(today);
       console.log("Progress sync response:", res.data);
@@ -75,9 +75,13 @@ export default function AutoProgressSync() {
 
   return (
     <div className="p-4 bg-gray-50 rounded-xl border mt-4">
-      <h3 className="text-lg font-semibold text-gray-700 mb-2">
+      <p className="text-xs            /* default (mobile) */
+  sm:text-sm         /* small screens */
+  md:text-lg       /* medium screens */
+  lg:text-lg         /* large screens */
+  xl:text-xl font-semibold text-gray-700 mb-2">
         Daily Project Progress Sync
-      </h3>
+      </p>
       <p className="text-sm text-gray-600 mb-3">
         Automatically saves all project progress to backend every midnight (IST).
       </p>
@@ -85,7 +89,7 @@ export default function AutoProgressSync() {
         <button
           onClick={sendDailyProgress}
           disabled={isSyncing}
-          className={`px-4 py-2 rounded-lg text-white ${
+          className={`px-4 md:px-3 py-2 md:py-1.5 rounded text-white max-[639px]:!text-xs ${
             isSyncing ? "bg-gray-400" : "bg-indigo-600 hover:bg-indigo-700"
           }`}
         >

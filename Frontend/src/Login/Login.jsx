@@ -35,6 +35,9 @@ const Login = () => {
 
       const response = await axios.post(url, payload);
 
+        console.log(response);
+        
+
       if (response.data.success) {
         toast.success(response.data.message || `${currentState} successful!`);
         setToken(response.data.token);

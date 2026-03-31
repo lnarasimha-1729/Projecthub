@@ -1,20 +1,20 @@
 import React from "react";
 import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 import SideBar from "./Sidebar/SideBar";
-import Dashboard from "./Component/Dashboard";
-import Projects from "./Component/Projects";
-import Workers from "./Component/Workers";
-import CLockEntries from "./Component/ClockEntries";
-import Queries from "./Component/Queries";
-import Reports from "./Component/Reports";
-import Chatbot from "./Component/Chatbot";
-import Calendar from "./Component/Calendar";
+import Dashboard from "./Pages/Dashboard";
+import Projects from "./Pages/Projects";
+import Workers from "./Pages/Workers";
+import CLockEntries from "./Pages/ClockEntries";
+import Queries from "./Pages/Queries";
+import Reports from "./Pages/Reports";
+import Chatbot from "./Pages/Chatbot";
+import Calendar from "./Pages/Calendar";
 import SearchBar from "./Searchbar/SearchBar";
 import Login from "./Login/Login";
 import UserContextProvider from "./Context/UserContext";
 import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
-import Profile from "./Component/Profile";
+import Profile from "./Profile/Profile";
 import Forgot from "./Component/Forgot";
 import PasswordChanged from "./Component/PasswordChanged";
 
@@ -23,19 +23,16 @@ const Layout = ({ children }) => {
   return (
     <div className="w-full h-screen flex">
       {/* Sidebar Section */}
-      <div className="z-4 w-[22%] h-full shadow-md bg-white pt-8">
+      <div className="z-4 w-0 md:w-60 lg:w-[17%] h-full shadow-md bg-white pt-8">
         <SideBar />
-      </div>
-
-      {/* Main Content Section */}
+      </div> {/* Main Content Section */}
       <div className="flex-1 h-full overflow-auto flex flex-col">
         {/* SearchBar at top */}
-        <div className="w-[73%] bg-gradient-to-r from-white via-white to-gray-50 shadow-md p-2 z-10 fixed">
-          <SearchBar />
-        </div>
-
-        {/* Page Routes */}
-        <div className="w-[95%] rounded-xl">{children}</div>
+        <div className="w-full lg:w-[92%] h-14 lg:min-h-24 max-w-7xl border-b border-gray-300 py-2">
+        <SearchBar />
+      </div> 
+          {/* Page Routes */}
+        <div className="md:flex-1 lg:w-[93%] rounded-xl">{children}</div>
       </div>
     </div>
   );
@@ -49,6 +46,8 @@ const App = () => {
 
   const isForgot = location.pathname === "/forgot"
 
+  const isProfile = location.pathname === "/profile"
+
   return (
     <UserContextProvider>
       {isLoginPage ? (
@@ -56,9 +55,13 @@ const App = () => {
         <Routes>
           <Route path="/login" element={<Login />} />
         </Routes>
-      ) :  isForgot ? ( 
+      ) : isForgot ? (
         <Routes>
-          <Route path="/forgot" element={<Forgot/>}/>
+          <Route path="/forgot" element={<Forgot />} />
+        </Routes>
+      ) : isProfile ? (
+        <Routes>
+          <Route path="/profile" element={<Profile />} />
         </Routes>
       ) : (
         // Wrap all other pages with layout
@@ -66,7 +69,6 @@ const App = () => {
           <ToastContainer position="top-center" autoClose={3000} />
           <Routes>
             <Route path="/" element={<Dashboard />} />
-            <Route path="/profile" element={<Profile/>}/>
             <Route path="/projects" element={<Projects />} />
             <Route path="/workers" element={<Workers />} />
             <Route path="/clock_entries" element={<CLockEntries />} />

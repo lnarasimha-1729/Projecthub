@@ -45,7 +45,7 @@ const Projects = () => {
     fetchProjects,
   } = useContext(UsersContext);
 
-  const baseUrl = backendUrl || "http://localhost:4000";
+  const baseUrl = backendUrl
   const totalWorkers = (workers || []).filter((w) => w.workerType === "Worker");
   const totalSupervisors = (workers || []).filter((w) => w.workerType === "Supervisor");
 
